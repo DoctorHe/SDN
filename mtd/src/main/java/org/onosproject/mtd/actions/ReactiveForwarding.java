@@ -54,6 +54,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 
@@ -204,7 +205,7 @@ public class ReactiveForwarding {
     Thread thread;
 
     @Activate
-    public void activate(ComponentContext context) {
+    public void activate(ComponentContext context) throws IOException {
 
         KryoNamespace.Builder metricSerializer = KryoNamespace.newBuilder()
 //                .register(KryoNamespaces.API)

@@ -1,10 +1,10 @@
 package org.onosproject.mtd.strategy;
 
-import org.onlab.packet.IP;
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.Host;
 import org.slf4j.Logger;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -20,6 +20,13 @@ public class MtdHostsManage implements Runnable{
     private final Logger log = getLogger(getClass());
     public boolean sign;//control the termination of threads
 
+    // log path
+    public static String logFolderPath = System.getProperty("user.home") + "/mtd_log";
+    public static String hostIpAddressMapPath = logFolderPath + "/hostIpAddressMap.log";
+    public static String hostToServerPath = logFolderPath + "/hostToServer.log";
+    public static String mtdLogPath = logFolderPath + "/mtd.log";
+    public static String realVirtualLogPath = logFolderPath + "/realVirtualMap.log";
+    public static String interceptedHostIpPath = logFolderPath + "/interceptedHostIp.log";
 
     // save hosts in map
     public Map<Host,IpAddress> hostIpAddressMap=new HashMap<Host, IpAddress>() ;
@@ -51,7 +58,7 @@ public class MtdHostsManage implements Runnable{
                 pathTM.put(host,false);
                 hostTM.put(host,false);
                 realVirtualMap.put(ipAddress,ipAddress);
-                writeHostIpAddressMap(hostIpAddressMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/hostIpAddressMap.log");
+                writeHostIpAddressMap(hostIpAddressMap);
             }
             count++;
         }
@@ -65,7 +72,7 @@ public class MtdHostsManage implements Runnable{
                 for(IpAddress ipAddress:host.ipAddresses()){
                     hostIpAddressMap.put(host, ipAddress);
                     writeLog("add success hostIpAddressMap",host);
-                    writeHostIpAddressMap(hostIpAddressMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/hostIpAddressMap.log");
+                    writeHostIpAddressMap(hostIpAddressMap);
                     log.info("add a host,the net has hosts:"+(++count));
                 }
             }
@@ -76,7 +83,7 @@ public class MtdHostsManage implements Runnable{
                 if (!realVirtualMap.containsKey(ipAddress)){
                     realVirtualMap.put(ipAddress,IpAddress.valueOf(getRandomIp()));
                     writeLog(host,"add host success realVirtualMap");
-                    writeRealVirtualMap(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/realVirtualMap.log");
+                    writeRealVirtualMap(realVirtualMap);
                  }
             }
         }
@@ -91,7 +98,7 @@ public class MtdHostsManage implements Runnable{
             if (hostIpAddressMap.containsKey(host)){
                 hostIpAddressMap.remove(host);
                 writeLog("remote host success",host);
-                writeHostIpAddressMap(hostIpAddressMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/hostIpAddressMap.log");
+                writeHostIpAddressMap(hostIpAddressMap);
                 log.info("remote a host,the net has hosts:"+(--count));
 
             }else{
@@ -102,7 +109,7 @@ public class MtdHostsManage implements Runnable{
                 if (realVirtualMap.containsKey(ipAddress)){
                     realVirtualMap.remove(ipAddress);
                     writeLog(host,"remote host success");
-                    writeRealVirtualMap(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/realVirtualMap.log");
+                    writeRealVirtualMap(realVirtualMap);
                 }
             }
 
@@ -119,8 +126,8 @@ public class MtdHostsManage implements Runnable{
             IpAddress bian=IpAddress.valueOf(getRandomIp());
             realVirtualMap.put(entry.getKey(), bian);
         }
-        writeRealVirtualMap(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/realVirtualMap.log");
-        writeAttack01(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/java/org/onosproject/mtd/attackTest/interceptedHostIp.log");
+        writeRealVirtualMap(realVirtualMap);
+        writeAttack01(realVirtualMap);
     }
 
     //获取一个随机IP
@@ -165,11 +172,23 @@ public class MtdHostsManage implements Runnable{
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         String formattedDate = sdf.format(d1);
         PrintWriter writer = null;
+        File folder = new File(logFolderPath);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
 
+        File file = new File(mtdLogPath);
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+        }
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter("/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/mtd.log", true));
-            writer.println("日期:"+formattedDate+"\t"+"frist:"+ src+"\t second:" +bian);
+            writer = new PrintWriter(new FileWriter(logFolderPath + "/mtd.log", true));
+            writer.println("日期:" + formattedDate + "\t" + "frist:" + src + "\t second:" + bian);
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -180,7 +199,7 @@ public class MtdHostsManage implements Runnable{
         }
     }
     
-    private  void writeHostIpAddressMap(Map<Host,IpAddress> src,String path) {
+    private  void writeHostIpAddressMap(Map<Host,IpAddress> src) {
 
         long miliseconds = System.currentTimeMillis(); // 获取事件发生时间
         Date d1 = new Date(miliseconds);
@@ -189,7 +208,7 @@ public class MtdHostsManage implements Runnable{
         PrintWriter writer = null;
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter(path, false));
+            writer = new PrintWriter(new FileWriter(hostIpAddressMapPath, false));
             PrintWriter finalWriter = writer;
             src.forEach((host, ipAddress) -> finalWriter.println("日期:" + formattedDate + "\t" + ipAddress+" yuan:" + host+":::")
             );
@@ -202,7 +221,7 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
-    private  void writeRealVirtualMap(Map<IpAddress,IpAddress> src, String path) {
+    private  void writeRealVirtualMap(Map<IpAddress,IpAddress> src) {
 
         long miliseconds = System.currentTimeMillis(); // 获取事件发生时间
         Date d1 = new Date(miliseconds);
@@ -211,7 +230,7 @@ public class MtdHostsManage implements Runnable{
         PrintWriter writer = null;
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter(path, false));
+            writer = new PrintWriter(new FileWriter(realVirtualLogPath, false));
             PrintWriter finalWriter = writer;
             src.forEach((host, ipAddress) -> finalWriter.println("日期:" + formattedDate + "\t" + " yuan:" + host+":::"+ipAddress)
             );
@@ -245,11 +264,11 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
-    private  void writeAttack01(Map<IpAddress,IpAddress> src, String path) {
+    private  void writeAttack01(Map<IpAddress,IpAddress> src) {
         PrintWriter writer = null;
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter(path, false));
+            writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
             PrintWriter finalWriter = writer;
             src.forEach((host, ipAddress) -> finalWriter.println(ipAddress));
         } catch (IOException e) {
@@ -288,9 +307,9 @@ public class MtdHostsManage implements Runnable{
                     }
 
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
-                    writeAttack01(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/java/org/onosproject/mtd/attackTest/interceptedHostIp.log");
+                    writeAttack01(realVirtualMap);
                     writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
-                    writeRealVirtualMap(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/realVirtualMap.log");
+                    writeRealVirtualMap(realVirtualMap);
                 }
             }else if(host[1]==1){//port transformation
                 for(Map.Entry<Host,Boolean> entry: portTM.entrySet()){
@@ -338,7 +357,7 @@ public class MtdHostsManage implements Runnable{
                 if (realVirtualMap.containsKey(ip)){
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
                     writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
-                    writeRealVirtualMap(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/realVirtualMap.log");
+                    writeRealVirtualMap(realVirtualMap);
                 }
             }else{ //port transformation
                 for(Map.Entry<Host,Boolean> entry: portTM.entrySet()){
@@ -357,8 +376,8 @@ public class MtdHostsManage implements Runnable{
             if (database[1]==0){//ip transformation
                 if (realVirtualMap.containsKey(ip)){
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
-                    writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
-                    writeRealVirtualMap(realVirtualMap,"/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/realVirtualMap.log");
+                    writeLog(ip,"Successful transformation, new ones are:" + realVirtualMap.get(ip));
+                    writeRealVirtualMap(realVirtualMap);
                 }
             }
             else{ //port transformation
