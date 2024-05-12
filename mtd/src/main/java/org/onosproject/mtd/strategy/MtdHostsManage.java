@@ -187,7 +187,7 @@ public class MtdHostsManage implements Runnable{
         }
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter(logFolderPath + "/mtd.log", true));
+            writer = new PrintWriter(new FileWriter(mtdLogPath, true));
             writer.println("日期:" + formattedDate + "\t" + "frist:" + src + "\t second:" + bian);
         } catch (IOException e) {
             e.printStackTrace();
@@ -247,7 +247,7 @@ public class MtdHostsManage implements Runnable{
         PrintWriter writer = null;
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter("/home/leibnizrz/work_space/mtd_ws/mtd-app/src/main/resources/hostToServer.log", false));
+            writer = new PrintWriter(new FileWriter(hostToServerPath, false));
             PrintWriter finalWriter = writer;
             finalWriter.println("Hosts included in the server1:");
             src.forEach((host) -> finalWriter.println(host));
