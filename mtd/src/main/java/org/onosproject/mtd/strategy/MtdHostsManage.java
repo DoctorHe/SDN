@@ -71,7 +71,7 @@ public class MtdHostsManage implements Runnable{
             if(!hostIpAddressMap.containsKey(host)){
                 for(IpAddress ipAddress:host.ipAddresses()){
                     hostIpAddressMap.put(host, ipAddress);
-                    writeLog("add success hostIpAddressMap",host);
+                    writeLog(ipAddress, "add success hostIpAddressMap");
                     writeHostIpAddressMap(hostIpAddressMap);
                     log.info("add a host,the net has hosts:"+(++count));
                 }
@@ -97,7 +97,7 @@ public class MtdHostsManage implements Runnable{
         if (host!=null){
             if (hostIpAddressMap.containsKey(host)){
                 hostIpAddressMap.remove(host);
-                writeLog("remote host success",host);
+                writeLog(hostIpAddressMap.get(host), "remote host success");
                 writeHostIpAddressMap(hostIpAddressMap);
                 log.info("remote a host,the net has hosts:"+(--count));
 
@@ -108,7 +108,7 @@ public class MtdHostsManage implements Runnable{
             for(IpAddress ipAddress:host.ipAddresses()){
                 if (realVirtualMap.containsKey(ipAddress)){
                     realVirtualMap.remove(ipAddress);
-                    writeLog(host,"remote host success");
+                    writeLog(ipAddress,"remote host success");
                     writeRealVirtualMap(realVirtualMap);
                 }
             }
@@ -188,7 +188,7 @@ public class MtdHostsManage implements Runnable{
         try {
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(mtdLogPath, true));
-            writer.println("date:" + formattedDate + "\t" + "real:" + elem1 + "\t virtual:" + elem2);
+            writer.println("date:" + formattedDate + "\t" + "real ip:" + elem1 + "\t info:" + elem2);
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -210,7 +210,7 @@ public class MtdHostsManage implements Runnable{
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(hostIpAddressMapPath, false));
             PrintWriter finalWriter = writer;
-            src.forEach((host, ipAddress) -> finalWriter.println("date:" + formattedDate + "\t" + ipAddress + " real:" + host + ":::")
+            src.forEach((host, ipAddress) -> finalWriter.println("date:" + formattedDate + "\t" + ipAddress + " info:" + host + ":::")
             );
         } catch (IOException e) {
             e.printStackTrace();
@@ -232,7 +232,7 @@ public class MtdHostsManage implements Runnable{
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(realVirtualLogPath, false));
             PrintWriter finalWriter = writer;
-            src.forEach((host, ipAddress) -> finalWriter.println("date:" + formattedDate + "\t" + " yuan:" + host+":::"+ipAddress)
+            src.forEach((realIp, virtualIp) -> finalWriter.println("date:" + formattedDate + "\t" + " real ip:" + realIp+"::: virtual ip: "+virtualIp)
             );
         } catch (IOException e) {
             e.printStackTrace();
@@ -298,18 +298,12 @@ public class MtdHostsManage implements Runnable{
             ip= IpAddress.valueOf(s);
             if (host[1]==0){//ip transformation
                 if (realVirtualMap.containsKey(ip)){
-                    writeLog("change set has", changedSet.size());
-                    if (changedSet.size() >= 15){
-                        writeLog("experiment finished!", null);
-                        continue;
-                    }else{
-                        changedSet.add(ip);
-                    }
-
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
                     writeAttack01(realVirtualMap);
                     writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
                     writeRealVirtualMap(realVirtualMap);
+                }else {
+                    writeLog(ip,"The host has not joined the topology, please ping again!");
                 }
             }else if(host[1]==1){//port transformation
                 for(Map.Entry<Host,Boolean> entry: portTM.entrySet()){
@@ -344,12 +338,12 @@ public class MtdHostsManage implements Runnable{
                     }
                     hostToServer(MtdMechanism.serverHasHosts1,MtdMechanism.serverHasHosts2,MtdMechanism.serverHasHosts3);
                 }
-                }
+            }
 
 
             int[] server=chances(mtdMechanism.hfrMatrix,16);
             System.out.println("chance server:"+ (server[0]+1) +",    mtd mechanism:" + (server[1]+1));
-            writeLog("****************","chance host:"+ (server[0]+1) +",    mtd mechanism:" + (server[1]+1));
+            writeLog("****************","chance server:"+ (server[0]+1) +",    mtd mechanism:" + (server[1]+1));
             //Splicing Strings to form host Ip addresses
             s=(121+((server[0])/4))+".0.0."+(1+((server[0]%4)));
             ip= IpAddress.valueOf(s);
@@ -358,7 +352,10 @@ public class MtdHostsManage implements Runnable{
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
                     writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
                     writeRealVirtualMap(realVirtualMap);
+                }else {
+                    writeLog(ip,"The server has not joined the topology, please ping again!");
                 }
+
             }else{ //port transformation
                 for(Map.Entry<Host,Boolean> entry: portTM.entrySet()){
                     portTM.put(entry.getKey(),false);
@@ -368,8 +365,8 @@ public class MtdHostsManage implements Runnable{
             }
 
             int[] database=chances(mtdMechanism.hfrMatrix,19);
-            System.out.println("chance database:"+ (database[0]+1) +",    mtd mechanism:" + (database[1]+1));
-            writeLog("****************","chance host:"+ (database[0]+1) +",    mtd mechanism:" + (database[1]+1));
+            System.out.println("chance database:" + (database[0]+1) + ",    mtd mechanism:" + (database[1]+1));
+            writeLog("****************","chance database:"+ (database[0]+1) + ",    mtd mechanism:" + (database[1]+1));
             //Splicing Strings to form host Ip addresses
             s=(121+((database[0])/4))+".0.0."+(1+((database[0]%4)));
             ip= IpAddress.valueOf(s);
@@ -378,6 +375,8 @@ public class MtdHostsManage implements Runnable{
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
                     writeLog(ip,"Successful transformation, new ones are:" + realVirtualMap.get(ip));
                     writeRealVirtualMap(realVirtualMap);
+                }else {
+                    writeLog(ip,"The database has not joined the topology, please ping again!");
                 }
             }
             else{ //port transformation
@@ -389,7 +388,9 @@ public class MtdHostsManage implements Runnable{
             }
 
             try {
-                Thread.sleep(5000);
+                sign = false;
+                Thread.sleep(50);
+                sign = true;
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }

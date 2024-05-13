@@ -205,7 +205,7 @@ public class ReactiveForwarding {
     Thread thread;
 
     @Activate
-    public void activate(ComponentContext context) throws IOException {
+    public void activate(ComponentContext context) {
 
         KryoNamespace.Builder metricSerializer = KryoNamespace.newBuilder()
 //                .register(KryoNamespaces.API)
