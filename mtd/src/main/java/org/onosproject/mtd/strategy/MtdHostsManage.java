@@ -123,8 +123,8 @@ public class MtdHostsManage implements Runnable{
     public void startShift(){
         writeLog("start shift", null);
         for (Map.Entry<IpAddress,IpAddress> entry: realVirtualMap.entrySet()) {
-            IpAddress bian=IpAddress.valueOf(getRandomIp());
-            realVirtualMap.put(entry.getKey(), bian);
+            IpAddress virtualIp=IpAddress.valueOf(getRandomIp());
+            realVirtualMap.put(entry.getKey(), virtualIp);
         }
         writeRealVirtualMap(realVirtualMap);
         writeAttack01(realVirtualMap);
@@ -165,10 +165,10 @@ public class MtdHostsManage implements Runnable{
         return x;
     }
 
-    public <T> void writeLog(T src,T bian){
+    public <T> void writeLog(T elem1,T elem2){
 
-        long miliseconds = System.currentTimeMillis(); // 获取事件发生时间
-        Date d1 = new Date(miliseconds);
+        long milliSeconds = System.currentTimeMillis(); // 获取事件发生时间
+        Date d1 = new Date(milliSeconds);
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         String formattedDate = sdf.format(d1);
         PrintWriter writer = null;
@@ -188,7 +188,7 @@ public class MtdHostsManage implements Runnable{
         try {
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(mtdLogPath, true));
-            writer.println("日期:" + formattedDate + "\t" + "frist:" + src + "\t second:" + bian);
+            writer.println("date:" + formattedDate + "\t" + "real:" + elem1 + "\t virtual:" + elem2);
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -201,8 +201,8 @@ public class MtdHostsManage implements Runnable{
     
     private  void writeHostIpAddressMap(Map<Host,IpAddress> src) {
 
-        long miliseconds = System.currentTimeMillis(); // 获取事件发生时间
-        Date d1 = new Date(miliseconds);
+        long millisSeconds = System.currentTimeMillis(); // 获取事件发生时间
+        Date d1 = new Date(millisSeconds);
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         String formattedDate = sdf.format(d1);
         PrintWriter writer = null;
@@ -210,7 +210,7 @@ public class MtdHostsManage implements Runnable{
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(hostIpAddressMapPath, false));
             PrintWriter finalWriter = writer;
-            src.forEach((host, ipAddress) -> finalWriter.println("日期:" + formattedDate + "\t" + ipAddress+" yuan:" + host+":::")
+            src.forEach((host, ipAddress) -> finalWriter.println("date:" + formattedDate + "\t" + ipAddress + " real:" + host + ":::")
             );
         } catch (IOException e) {
             e.printStackTrace();
@@ -223,8 +223,8 @@ public class MtdHostsManage implements Runnable{
     }
     private  void writeRealVirtualMap(Map<IpAddress,IpAddress> src) {
 
-        long miliseconds = System.currentTimeMillis(); // 获取事件发生时间
-        Date d1 = new Date(miliseconds);
+        long millisSeconds = System.currentTimeMillis(); // 获取事件发生时间
+        Date d1 = new Date(millisSeconds);
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         String formattedDate = sdf.format(d1);
         PrintWriter writer = null;
@@ -232,7 +232,7 @@ public class MtdHostsManage implements Runnable{
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(realVirtualLogPath, false));
             PrintWriter finalWriter = writer;
-            src.forEach((host, ipAddress) -> finalWriter.println("日期:" + formattedDate + "\t" + " yuan:" + host+":::"+ipAddress)
+            src.forEach((host, ipAddress) -> finalWriter.println("date:" + formattedDate + "\t" + " yuan:" + host+":::"+ipAddress)
             );
         } catch (IOException e) {
             e.printStackTrace();
@@ -243,7 +243,7 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
-    private  void hostToServer(Set<Integer> src,Set<Integer> src2,Set<Integer> src3) {
+    private  void hostToServer(Set<Integer> src, Set<Integer> src2, Set<Integer> src3) {
         PrintWriter writer = null;
         try {
             // 创建日志文件的PrintWriter对象
@@ -288,7 +288,7 @@ public class MtdHostsManage implements Runnable{
         mtdMechanism.export();
         MtdMechanism.initSHH();
         hostToServer(MtdMechanism.serverHasHosts1,MtdMechanism.serverHasHosts2,MtdMechanism.serverHasHosts3);
-        while(sign==true){
+        while(sign){
             int[] host=chances(mtdMechanism.hfrMatrix,0);
             System.out.println("chance host:"+ (host[0]+1) +",    mtd mechanism:" + (host[1]+1));
             writeLog("****************","chance host:"+ (host[0]+1) +",    mtd mechanism:" + (host[1]+1));
@@ -325,7 +325,7 @@ public class MtdHostsManage implements Runnable{
                 pathTM.put(IpAddressHostMap.get(ip),true);
                 writeLog(ip,"Path Successful transformation");
             }else {//host transformation
-                if(MtdMechanism.hostMtdSign==true){
+                if(MtdMechanism.hostMtdSign){
                     for(Map.Entry<Host,Boolean> entry: hostTM.entrySet()){
                         hostTM.put(entry.getKey(),false);
                     }
@@ -364,7 +364,7 @@ public class MtdHostsManage implements Runnable{
                     portTM.put(entry.getKey(),false);
                 }
                 portTM.put(IpAddressHostMap.get(ip),true);
-                writeLog(ip,"Port Successful transformation");
+                writeLog(ip,"Port is transformed successfully");
             }
 
             int[] database=chances(mtdMechanism.hfrMatrix,19);
@@ -399,7 +399,7 @@ public class MtdHostsManage implements Runnable{
     //rhm,method that neither considers the host nor the mechanism
 //    @Override
     public void rhm() {
-        while(sign==true){
+        while(sign){
 
             startShift();
             try {
