@@ -20,28 +20,25 @@ import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractShellCommand;
 import org.apache.karaf.shell.api.action.Argument;
 import org.onlab.packet.MacAddress;
-import org.onosproject.mtd.actions.MacAddressCompleter;
-import org.onosproject.mtd.actions.ReactiveForwarding;
+import org.onosproject.mtd.strategy.MtdMechanism;
 
 /**
- * Sample reactive forwarding application with mtd.
+ * Sample reactive forwarding application.
  */
 @Service
-@Command(scope = "onos", name = "mtd",
+@Command(scope = "onos", name = "reactive-fwd-metrics",
         description = "List all the metrics of reactive fwd app based on mac address")
 public class ReactiveForwardingCommand extends AbstractShellCommand {
-    @Argument(index = 0, name = "mac", description = "One Mac Address",
-            required = false, multiValued = false)
-    @Completion(MacAddressCompleter.class)
-    String mac = null;
+    //    @Argument(index = 0, name = "mac", description = "One Mac Address",
+//            required = false, multiValued = false)
+//    @Completion(MacAddressCompleter.class)
+//    String mac = null;
     @Override
     protected void doExecute() {
-//        ReactiveForwarding reactiveForwardingService = AbstractShellCommand.get(ReactiveForwarding.class);
-//        MacAddress macAddress = null;
-//        if (mac != null) {
-//            macAddress = MacAddress.valueOf(mac);
-//        }
-//        reactiveForwardingService.printMetric(macAddress);
-        System.out.println("dddddd");
+        MtdMechanism.portMtdSign=false;
+        MtdMechanism.hostMtdSign=false;
+        MtdMechanism.ipMtdSign=false;
+        MtdMechanism.pathMtdSign=false;
+        log.info("nnnnnnnnnnnnn");
     }
 }

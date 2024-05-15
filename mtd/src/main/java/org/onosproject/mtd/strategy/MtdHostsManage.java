@@ -39,10 +39,6 @@ public class MtdHostsManage implements Runnable{
     public Map<Host, Boolean> pathTM=new HashMap<Host, Boolean>();
     public Map<Host, Boolean> hostTM=new HashMap<Host, Boolean>();
 
-    //for experiment
-    //private static int variableCount = 0;
-    private Set<IpAddress> changedSet = new HashSet<IpAddress>();
-
     //get all hosts
     public MtdHostsManage(Iterable<Host> hosts) {
         beginGetAllHosts(hosts);
@@ -87,8 +83,8 @@ public class MtdHostsManage implements Runnable{
                  }
             }
         }
-        else
-            log.info("add is fail host cannot is null");
+//        else
+//            log.info("add is fail host cannot is null");
 
     }
 
@@ -389,7 +385,7 @@ public class MtdHostsManage implements Runnable{
 
             try {
                 sign = false;
-                Thread.sleep(50);
+                Thread.sleep(50000);
                 sign = true;
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
@@ -399,8 +395,14 @@ public class MtdHostsManage implements Runnable{
 
     //rhm,method that neither considers the host nor the mechanism
 //    @Override
-    public void rhm() {
-        while(sign){
+    public void runRhm() {
+
+        try {
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        while(sign==true){
 
             startShift();
             try {
