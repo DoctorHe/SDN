@@ -384,9 +384,7 @@ public class MtdHostsManage implements Runnable{
             }
 
             try {
-                sign = false;
-                Thread.sleep(50000);
-                sign = true;
+                Thread.sleep(5000);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
