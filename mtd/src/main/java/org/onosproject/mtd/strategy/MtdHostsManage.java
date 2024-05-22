@@ -260,6 +260,23 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
+
+    public void rollbackIp(){
+        PrintWriter writer = null;
+        try {
+            // 创建日志文件的PrintWriter对象
+            writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
+            PrintWriter finalWriter = writer;
+            realVirtualMap.forEach((host, ipAddress) -> finalWriter.println(host));
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                // 关闭写入流
+                writer.close();
+            }
+        }
+    }
     private  void writeAttack01(Map<IpAddress,IpAddress> src) {
         PrintWriter writer = null;
         try {
@@ -348,6 +365,7 @@ public class MtdHostsManage implements Runnable{
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
                     writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
                     writeRealVirtualMap(realVirtualMap);
+                    writeAttack01(realVirtualMap);
                 }else {
                     writeLog(ip,"The server has not joined the topology, please ping again!");
                 }
@@ -371,6 +389,7 @@ public class MtdHostsManage implements Runnable{
                     realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
                     writeLog(ip,"Successful transformation, new ones are:" + realVirtualMap.get(ip));
                     writeRealVirtualMap(realVirtualMap);
+                    writeAttack01(realVirtualMap);
                 }else {
                     writeLog(ip,"The database has not joined the topology, please ping again!");
                 }

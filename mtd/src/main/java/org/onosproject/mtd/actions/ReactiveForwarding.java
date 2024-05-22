@@ -246,6 +246,7 @@ public class ReactiveForwarding {
     @Deactivate
     public void deactivate() {
         mtdHostsManage.sign=false;
+        mtdHostsManage.rollbackIp();
         cfgService.unregisterProperties(getClass(), false);
         withdrawIntercepts();
         flowRuleService.removeFlowRulesById(appId);
