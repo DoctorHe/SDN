@@ -1,4 +1,4 @@
-package org.osdd.app.data;
+package org.nids.app.data;
 
 import org.onosproject.net.DeviceId;
 

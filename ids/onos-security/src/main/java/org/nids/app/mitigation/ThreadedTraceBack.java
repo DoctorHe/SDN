@@ -1,4 +1,4 @@
-package org.osdd.app.mitigation;
+package org.nids.app.mitigation;
 
 import org.onosproject.net.DeviceId;
 

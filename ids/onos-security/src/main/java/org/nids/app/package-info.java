@@ -17,4 +17,4 @@
 /**
  * ONOS application archetype.
  */
-package org.osdd.app;
+package org.nids.app;

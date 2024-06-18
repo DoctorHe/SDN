@@ -277,6 +277,22 @@ public class MtdHostsManage implements Runnable{
         }
     }
 
+    public void rollbackAttackList(){
+        PrintWriter writer = null;
+        try {
+            // 创建日志文件的PrintWriter对象
+            writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
+            PrintWriter finalWriter = writer;
+            realVirtualMap.forEach((host, ipAddress) -> finalWriter.println(host));
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                // 关闭写入流
+                writer.close();
+            }
+        }
+    }
     @Override
     public void run() {
         MtdMechanism mtdMechanism=new MtdMechanism();

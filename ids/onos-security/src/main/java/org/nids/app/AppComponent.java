@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.osdd.app;
+package org.nids.app;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,8 +32,8 @@ import org.onosproject.net.packet.InboundPacket;
 import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketService;
-import org.osdd.app.data.DataFeature;
-import org.osdd.app.mitigation.ThreadedTraceBack;
+import org.nids.app.data.DataFeature;
+import org.nids.app.mitigation.ThreadedTraceBack;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -43,7 +43,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import java.text.SimpleDateFormat;
 import java.io.*;
 import java.net.Socket;
 import java.util.*;
@@ -95,10 +95,13 @@ public class AppComponent implements SomeInterface {
     private int pythonServerPort = 13131;
     private Socket socket;
 
+    public static String logFolderPath = System.getProperty("user.home") + "/ids_log";
+    public static String logPath = logFolderPath + "/ids.log";
+
     @Activate
     protected void activate() {
         cfgService.registerProperties(getClass());
-        appId = coreService.registerApplication("org.osdd.app");
+        appId = coreService.registerApplication("org.ids.app");
 
         // 注册包处理,包处理器将会添加到现有包处理器列表当中
         packetService.addProcessor(inPacketProcessor, PacketProcessor.director(0));
@@ -113,6 +116,7 @@ public class AppComponent implements SomeInterface {
             log.info("The program encountered a socket connection exception");
             e.printStackTrace();
         }
+        writeLog("ids activate!");
         log.info("Started DDoS Defend");
 
     }
@@ -151,6 +155,40 @@ public class AppComponent implements SomeInterface {
         log.info("Invoked");
     }
 
+    public <T> void writeLog(T elem1){
+
+        long milliSeconds = System.currentTimeMillis(); // 获取事件发生时间
+        Date d1 = new Date(milliSeconds);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String formattedDate = sdf.format(d1);
+        PrintWriter writer = null;
+        File folder = new File(logFolderPath);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+
+        File file = new File(logPath);
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+        }
+        try {
+            // 创建日志文件的PrintWriter对象
+            writer = new PrintWriter(new FileWriter(logPath, true));
+            writer.println("date:" + formattedDate + "\t" + "info:" + elem1);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                // 关闭写入流
+                writer.close();
+            }
+        }
+    }
+
     // 包处理器
     private class InPacketProcessor implements PacketProcessor {
         public InPacketProcessor() {
@@ -184,6 +222,28 @@ public class AppComponent implements SomeInterface {
             this.socket = socket;
         }
 
+        private  void writeFlowLog(List<FlowEntry>  src) {
+
+            long millisSeconds = System.currentTimeMillis(); // 获取事件发生时间
+            Date d1 = new Date(millisSeconds);
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String formattedDate = sdf.format(d1);
+            PrintWriter writer = null;
+            try {
+                // 创建日志文件的PrintWriter对象
+                writer = new PrintWriter(new FileWriter(logPath, false));
+                PrintWriter finalWriter = writer;
+                src.forEach((flowEntry) -> finalWriter.println("date:" + formattedDate + "\t" + " flows:" + flowEntry.toString())
+                );
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                if (writer != null) {
+                    // 关闭写入流
+                    writer.close();
+                }
+            }
+        }
         // 计算用于检测攻击的流量特征值
         // TODO ： 看看内存、速度等方面还有没有能优化的点
         private void getFlowInfo(DeviceId deviceId) {
@@ -206,7 +266,7 @@ public class AppComponent implements SomeInterface {
                     iterator.remove();
                 }
             }
-
+            writeFlowLog(flowEntriesListById);
             int flowListSize = flowEntriesListById.size();
             int sumPacket = 0;
             int sumByte = 0;
@@ -362,8 +422,10 @@ public class AppComponent implements SomeInterface {
         @Override
         public void run() {
             // 获得交换机，并遍历
+            writeLog("IDS run!");
             deviceService.getDevices().forEach(device -> {
                 DeviceId id = device.id();
+                writeLog("Device id : " + id.toString());
                 // 得到该交换机的几个特征
                 getFlowInfo(id);
                 if(this.dataFeature.getId() != null){
