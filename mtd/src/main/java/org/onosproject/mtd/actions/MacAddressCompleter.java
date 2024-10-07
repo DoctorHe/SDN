@@ -20,7 +20,7 @@ import org.apache.karaf.shell.api.console.Completer;
 import org.apache.karaf.shell.api.console.Session;
 import org.apache.karaf.shell.support.completers.StringsCompleter;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.mtd.dataStatistics.ReactiveForwardMetrics;
+import org.onosproject.mtd.data.ReactiveForwardMetrics;
 import org.onosproject.store.service.EventuallyConsistentMap;
 import java.util.List;
 import java.util.SortedSet;

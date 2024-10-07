@@ -1,6 +1,9 @@
 package org.onosproject.mtd.strategy;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.onlab.packet.IpAddress;
+import org.onosproject.mtd.data.PolymorphicHost;
+import org.onosproject.net.Device;
 import org.onosproject.net.Host;
 import org.slf4j.Logger;
 
@@ -20,29 +23,56 @@ public class MtdHostsManage implements Runnable{
     private final Logger log = getLogger(getClass());
     public boolean sign;//control the termination of threads
 
+    public boolean isPolymorphicMode;
     // log path
-    public static String logFolderPath = System.getProperty("user.home") + "/mtd_log";
-    public static String hostIpAddressMapPath = logFolderPath + "/hostIpAddressMap.log";
-    public static String hostToServerPath = logFolderPath + "/hostToServer.log";
-    public static String mtdLogPath = logFolderPath + "/mtd.log";
-    public static String realVirtualLogPath = logFolderPath + "/realVirtualMap.log";
-    public static String interceptedHostIpPath = logFolderPath + "/interceptedHostIp.log";
+    private static String logFolderPath = System.getProperty("user.home") + "/mtd_log";
+    private static String hostIpAddressMapPath = logFolderPath + "/hostIpAddressMap.log";
+    private static String hostToServerPath = logFolderPath + "/hostToServer.log";
+    private static String mtdLogPath = logFolderPath + "/mtd.log";
+    private static String realVirtualIpLogPath = logFolderPath + "/realVirtualIpMap.log";
+    private static String realVirtualLogPath = logFolderPath + "/realVirtualMap.log";
+    private static String interceptedHostIpPath = logFolderPath + "/interceptedHostIp.log";
 
     // save hosts in map
-    public Map<Host,IpAddress> hostIpAddressMap=new HashMap<Host, IpAddress>() ;
-    public Map<IpAddress,Host> IpAddressHostMap=new HashMap<IpAddress,Host>() ;
+    public Map<Host,IpAddress> hostIpAddressMap = new HashMap<Host, IpAddress>() ;
+    public Map<IpAddress,Host> IpAddressHostMap = new HashMap<IpAddress,Host>() ;
+
     //Save the mapping between the real and virtual addresses of the host
-    public Map<IpAddress,IpAddress> realVirtualMap=new HashMap<IpAddress, IpAddress>();
+    public Map<IpAddress,IpAddress> realVirtualIpMap = new HashMap<IpAddress, IpAddress>();
+
+    private ArrayList<PolymorphicHost> polymorphicHosts = new ArrayList<>();
+    //Store polymorphic identification information before and after the change
+    private Map<PolymorphicHost, PolymorphicHost> realVirtualMap = new HashMap<>();
 
     //true or false transformation judgment matrix;
-    public Map<Host, Boolean> portTM=new HashMap<Host, Boolean>();
-    public Map<Host, Boolean> pathTM=new HashMap<Host, Boolean>();
-    public Map<Host, Boolean> hostTM=new HashMap<Host, Boolean>();
+    public Map<Host, Boolean> portTM = new HashMap<Host, Boolean>();
+    public Map<Host, Boolean> pathTM = new HashMap<Host, Boolean>();
+    public Map<Host, Boolean> hostTM = new HashMap<Host, Boolean>();
 
     //get all hosts
     public MtdHostsManage(Iterable<Host> hosts) {
         beginGetAllHosts(hosts);
-        writeLog("init mtd host manage", hosts.toString());
+        writeLog("Launch mtd management in ip mode", hosts.toString());
+    }
+    public MtdHostsManage(int vmx){
+        beginGetAllHosts(vmx);
+        writeLog("Launch" +
+                "" +
+                "" +
+                " mtd management in polymorphic mode!", polymorphicHosts.toString());
+    }
+
+    public void GetAllDevices(Iterable<Device> devices){
+        int cnt = 0;
+        for(Device device:devices){
+            writeLog("device" + cnt, device.toString());
+            cnt ++;
+        }
+    }
+    public void beginGetAllHosts(int vmx){
+        for (int i = 64; i < 85; i++) {
+            polymorphicHosts.add(new PolymorphicHost(vmx, i));
+        }
     }
 
     public void beginGetAllHosts(Iterable<Host> hosts){
@@ -53,12 +83,12 @@ public class MtdHostsManage implements Runnable{
                 portTM.put(host,false);
                 pathTM.put(host,false);
                 hostTM.put(host,false);
-                realVirtualMap.put(ipAddress,ipAddress);
+                realVirtualIpMap.put(ipAddress,ipAddress);
                 writeHostIpAddressMap(hostIpAddressMap);
             }
             count++;
         }
-        log.info("start,the net has hosts :"+count);
+        log.info("start,the net has hosts :" + count);
     }
 
     //add a host
@@ -76,11 +106,11 @@ public class MtdHostsManage implements Runnable{
                 log.info("add fail,host is existed");
             }
             for(IpAddress ipAddress:host.ipAddresses()){
-                if (!realVirtualMap.containsKey(ipAddress)){
-                    realVirtualMap.put(ipAddress,IpAddress.valueOf(getRandomIp()));
-                    writeLog(host,"add host success realVirtualMap");
-                    writeRealVirtualMap(realVirtualMap);
-                 }
+                if (!realVirtualIpMap.containsKey(ipAddress)){
+                    realVirtualIpMap.put(ipAddress,IpAddress.valueOf(getRandomIp()));
+                    writeLog(host,"add host success realVirtualIpMap");
+                    writeRealVirtualIpMap(realVirtualIpMap);
+                }
             }
         }
 //        else
@@ -102,28 +132,28 @@ public class MtdHostsManage implements Runnable{
             }
 
             for(IpAddress ipAddress:host.ipAddresses()){
-                if (realVirtualMap.containsKey(ipAddress)){
-                    realVirtualMap.remove(ipAddress);
+                if (realVirtualIpMap.containsKey(ipAddress)){
+                    realVirtualIpMap.remove(ipAddress);
                     writeLog(ipAddress,"remote host success");
-                    writeRealVirtualMap(realVirtualMap);
+                    writeRealVirtualIpMap(realVirtualIpMap);
                 }
             }
 
         }
         else
-            log.info("remote if fail,host cannot is null");
+            log.info("remote if fail, host cannot is null");
 
     }
 
     //shiftAddress
     public void startShift(){
         writeLog("start shift", null);
-        for (Map.Entry<IpAddress,IpAddress> entry: realVirtualMap.entrySet()) {
+        for (Map.Entry<IpAddress,IpAddress> entry: realVirtualIpMap.entrySet()) {
             IpAddress virtualIp=IpAddress.valueOf(getRandomIp());
-            realVirtualMap.put(entry.getKey(), virtualIp);
+            realVirtualIpMap.put(entry.getKey(), virtualIp);
         }
-        writeRealVirtualMap(realVirtualMap);
-        writeAttack01(realVirtualMap);
+        writeRealVirtualIpMap(realVirtualIpMap);
+        writeAttack01(realVirtualIpMap);
     }
 
     //获取一个随机IP
@@ -147,6 +177,29 @@ public class MtdHostsManage implements Runnable{
         int index = random.nextInt(10);
         String ip = num2ip(range[index][0] + random.nextInt(range[index][1] - range[index][0]));
         return ip;
+    }
+    public Integer getRandomIdentity(){
+        Random random = new Random();
+        Integer identity = 202271720 + random.nextInt(8) * 100000 + random.nextInt(100) - 64;
+        return identity;
+    }
+    public Integer getRandomMfID(){
+        Random random = new Random();
+        Integer mfID = 1 + random.nextInt(8) * 100 + random.nextInt(100) - 64;
+        return mfID;
+    }
+    public Pair<Integer,Integer> getRandomGeoPosition(){
+        Random random = new Random();
+        Integer geoPosLat = random.nextInt(100) - 63;
+        Integer geoPosLon = PolymorphicHost.float2CustomBin(-180 + random.nextInt(8) * 20 + (random.nextInt(100) - 64) * 0.4);
+        Pair<Integer,Integer> geoPosition = Pair.of(geoPosLat, geoPosLon);
+        return geoPosition;
+    }
+
+    public Integer getRandomNdnName(){
+        Random random = new Random();
+        Integer ndnName=202271720 + random.nextInt(8) * 100000 + random.nextInt(100) - 64;
+        return ndnName;
     }
 
     // 将十进制转换成IP地址
@@ -184,7 +237,7 @@ public class MtdHostsManage implements Runnable{
         try {
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(mtdLogPath, true));
-            writer.println("date:" + formattedDate + "\t" + "real ip:" + elem1 + "\t info:" + elem2);
+            writer.println("date:" + formattedDate + "\t" + "info:" + elem1 + "\t :" + elem2);
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -194,7 +247,7 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
-    
+
     private  void writeHostIpAddressMap(Map<Host,IpAddress> src) {
 
         long millisSeconds = System.currentTimeMillis(); // 获取事件发生时间
@@ -217,8 +270,8 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
-    private  void writeRealVirtualMap(Map<IpAddress,IpAddress> src) {
 
+    private  void writeRealVirtualMap(Map<PolymorphicHost,PolymorphicHost> host) {
         long millisSeconds = System.currentTimeMillis(); // 获取事件发生时间
         Date d1 = new Date(millisSeconds);
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -228,7 +281,30 @@ public class MtdHostsManage implements Runnable{
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(realVirtualLogPath, false));
             PrintWriter finalWriter = writer;
-            src.forEach((realIp, virtualIp) -> finalWriter.println("date:" + formattedDate + "\t" + " real ip:" + realIp+"::: virtual ip: "+virtualIp)
+            host.forEach((realHost, virtualHost) -> finalWriter.println("date:" + formattedDate + "\n" + "  real host:" + realHost + "\n  virtual host: " + virtualHost)
+            );
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                // 关闭写入流
+                writer.close();
+            }
+        }
+    }
+
+    private  void writeRealVirtualIpMap(Map<IpAddress,IpAddress> src) {
+
+        long millisSeconds = System.currentTimeMillis(); // 获取事件发生时间
+        Date d1 = new Date(millisSeconds);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String formattedDate = sdf.format(d1);
+        PrintWriter writer = null;
+        try {
+            // 创建日志文件的PrintWriter对象
+            writer = new PrintWriter(new FileWriter(realVirtualIpLogPath, false));
+            PrintWriter finalWriter = writer;
+            src.forEach((realIp, virtualIp) -> finalWriter.println("date:" + formattedDate + "\t" + " real ip:" + realIp + "::: virtual ip: " + virtualIp)
             );
         } catch (IOException e) {
             e.printStackTrace();
@@ -283,13 +359,47 @@ public class MtdHostsManage implements Runnable{
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
             PrintWriter finalWriter = writer;
-            realVirtualMap.forEach((host, ipAddress) -> finalWriter.println(host));
+            realVirtualIpMap.forEach((host, ipAddress) -> finalWriter.println(host));
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
             if (writer != null) {
                 // 关闭写入流
                 writer.close();
+            }
+        }
+    }
+
+    public void ipModeAddressShuffle(IpAddress ip){
+        writeLog(ip,"try to ip shuffle.");
+        if (realVirtualIpMap.containsKey(ip)){
+            realVirtualIpMap.put(ip,IpAddress.valueOf(getRandomIp()));
+            writeAttack01(realVirtualIpMap);
+            writeLog(ip,"Successful ip transformation, new ones are:" + realVirtualIpMap.get(ip));
+            writeRealVirtualIpMap(realVirtualIpMap);
+        }else {
+            writeLog(ip,"The host has not joined the topology, please ping again!");
+        }
+    }
+
+    public void polymorphicModeShuffle(IpAddress ip){
+        writeLog(ip.toString(), "try to identification shuffle.");
+        for (PolymorphicHost host : polymorphicHosts){
+
+            if (host.getIpAddress().trim().equals(ip.toString().trim())){
+                String virtualIp = getRandomIp();
+                Integer virtualIdentity = getRandomIdentity();
+                Integer virtualMfID = getRandomMfID();
+                Integer virtualNdnName = getRandomNdnName();
+                Pair<Integer,Integer> virtualGeoPosition = getRandomGeoPosition();
+                Pair<Integer,Integer> virtualDis = Pair.of(0,0);
+                Pair<Integer,Integer> virtualNdnInfo = Pair.of(virtualNdnName,0);
+                PolymorphicHost virtualPolymorphicHost = new PolymorphicHost(
+                        host.getMacAddress(),virtualIp,virtualIdentity,virtualMfID,virtualGeoPosition,virtualDis,virtualNdnInfo);
+                realVirtualMap.put(host,virtualPolymorphicHost);
+                writeRealVirtualMap(realVirtualMap);
+                writeLog(ip,"Successful transformation, new ones are:" + virtualPolymorphicHost);
+                break;
             }
         }
     }
@@ -308,14 +418,11 @@ public class MtdHostsManage implements Runnable{
             //Splicing Strings to form host Ip addresses
             String s=(121+((host[0])/4))+".0.0."+(1+((host[0]%4)));
             ip= IpAddress.valueOf(s);
-            if (host[1]==0){//ip transformation
-                if (realVirtualMap.containsKey(ip)){
-                    realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
-                    writeAttack01(realVirtualMap);
-                    writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
-                    writeRealVirtualMap(realVirtualMap);
-                }else {
-                    writeLog(ip,"The host has not joined the topology, please ping again!");
+            if (host[1]==0){
+                if (isPolymorphicMode){
+                    polymorphicModeShuffle(ip);
+                }else{
+                    ipModeAddressShuffle(ip);
                 }
             }else if(host[1]==1){//port transformation
                 for(Map.Entry<Host,Boolean> entry: portTM.entrySet()){
@@ -360,14 +467,11 @@ public class MtdHostsManage implements Runnable{
             s=(121+((server[0])/4))+".0.0."+(1+((server[0]%4)));
             ip= IpAddress.valueOf(s);
             if (server[1]==0){//ip transformation
-                if (realVirtualMap.containsKey(ip)){
-                    realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
-                    writeLog(ip,"Successful transformation, new ones are:"+realVirtualMap.get(ip));
-                    writeRealVirtualMap(realVirtualMap);
-                }else {
-                    writeLog(ip,"The server has not joined the topology, please ping again!");
+                if (isPolymorphicMode){
+                    polymorphicModeShuffle(ip);
+                }else{
+                    ipModeAddressShuffle(ip);
                 }
-
             }else{ //port transformation
                 for(Map.Entry<Host,Boolean> entry: portTM.entrySet()){
                     portTM.put(entry.getKey(),false);
@@ -383,12 +487,10 @@ public class MtdHostsManage implements Runnable{
             s=(121+((database[0])/4))+".0.0."+(1+((database[0]%4)));
             ip= IpAddress.valueOf(s);
             if (database[1]==0){//ip transformation
-                if (realVirtualMap.containsKey(ip)){
-                    realVirtualMap.put(ip,IpAddress.valueOf(getRandomIp()));
-                    writeLog(ip,"Successful transformation, new ones are:" + realVirtualMap.get(ip));
-                    writeRealVirtualMap(realVirtualMap);
-                }else {
-                    writeLog(ip,"The database has not joined the topology, please ping again!");
+                if (isPolymorphicMode){
+                    polymorphicModeShuffle(ip);
+                }else{
+                    ipModeAddressShuffle(ip);
                 }
             }
             else{ //port transformation
@@ -398,7 +500,6 @@ public class MtdHostsManage implements Runnable{
                 portTM.put(IpAddressHostMap.get(ip),true);
                 writeLog(ip,"Port Successful transformation");
             }
-
             try {
                 Thread.sleep(5000);
             } catch (InterruptedException e) {

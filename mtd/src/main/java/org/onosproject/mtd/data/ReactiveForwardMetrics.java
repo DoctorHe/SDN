@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onosproject.mtd.dataStatistics;
+package org.onosproject.mtd.data;
 
 import org.onlab.packet.MacAddress;
 import static com.google.common.base.MoreObjects.toStringHelper;

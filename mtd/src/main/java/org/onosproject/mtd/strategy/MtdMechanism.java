@@ -12,14 +12,17 @@ public class MtdMechanism {
     public static boolean portMtdSign=false;
     public static boolean pathMtdSign=true;
     public static boolean hostMtdSign=true;
+    public static int[][] mtdMatrix = {
+            {0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,5,5},
+            {0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,0,1}};
 
-    //Host iscluded in the server
+    //Host included in the server
     public static Set<Integer> serverHasHosts1= new HashSet<>();
     public static Set<Integer> serverHasHosts2= new HashSet<>();
     public static Set<Integer> serverHasHosts3= new HashSet<>();
     public static Set<Integer> databaseHasServer1= new HashSet<>();
     public static Set<Integer> databaseHasServer2= new HashSet<>();
-    //dinfine the path host-server-database;
+    //define the path host-server-database;
     public static void initSHH(){
         serverHasHosts1.add(1);
         serverHasHosts1.add(2);
