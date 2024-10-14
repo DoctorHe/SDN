@@ -18,7 +18,7 @@ public class PolymorphicHost {
     public PolymorphicHost(){}
     public PolymorphicHost(Integer vmx, Integer index){
         this.macAddress = String.format("00:00:00:00:%02x:%02x", (vmx + 1) & 0xFF, index & 0xFF);
-        this.ipAddress= String.format("%d.0.0.%d", 121 + MtdMechanism.mtdMatrix[0][index - 64], MtdMechanism.mtdMatrix[1][index - 64] + 1);
+        this.ipAddress= String.format("10.1.%d.%d", vmx + 1, index - 64 + 12);
         this.identity=202271720 + vmx * 100000 + index - 64;
         this.mfID = 1 + vmx * 100 + index - 64;
         this.geoPosLat = index - 63;

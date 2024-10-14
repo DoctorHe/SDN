@@ -31,7 +31,7 @@ public class MtdHostsManage implements Runnable{
     private static String mtdLogPath = logFolderPath + "/mtd.log";
     private static String realVirtualIpLogPath = logFolderPath + "/realVirtualIpMap.log";
     private static String realVirtualLogPath = logFolderPath + "/realVirtualMap.log";
-    private static String interceptedHostIpPath = logFolderPath + "/interceptedHostIp.log";
+    private static String interceptedHostIpPath = System.getProperty("user.home") + "/work_space/p4/bmv2/home/interceptedHostIp.log";
 
     // save hosts in map
     public Map<Host,IpAddress> hostIpAddressMap = new HashMap<Host, IpAddress>() ;
@@ -48,13 +48,14 @@ public class MtdHostsManage implements Runnable{
     public Map<Host, Boolean> portTM = new HashMap<Host, Boolean>();
     public Map<Host, Boolean> pathTM = new HashMap<Host, Boolean>();
     public Map<Host, Boolean> hostTM = new HashMap<Host, Boolean>();
-
+    public int vmNumber;
     //get all hosts
     public MtdHostsManage(Iterable<Host> hosts) {
         beginGetAllHosts(hosts);
         writeLog("Launch mtd management in ip mode", hosts.toString());
     }
     public MtdHostsManage(int vmx){
+        vmNumber = vmx;
         beginGetAllHosts(vmx);
         writeLog("Launch" +
                 "" +
@@ -70,8 +71,10 @@ public class MtdHostsManage implements Runnable{
         }
     }
     public void beginGetAllHosts(int vmx){
-        for (int i = 64; i < 85; i++) {
-            polymorphicHosts.add(new PolymorphicHost(vmx, i));
+        for (int i = 64; i < 101; i++) {
+            PolymorphicHost polymorphicHost = new PolymorphicHost(vmx, i);
+            polymorphicHosts.add(polymorphicHost);
+            realVirtualMap.put(polymorphicHost, polymorphicHost);
         }
     }
 
@@ -336,6 +339,23 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
+
+    private  void writePolymorphicAttackList(Map<PolymorphicHost,PolymorphicHost> src) {
+        PrintWriter writer = null;
+        try {
+            // 创建日志文件的PrintWriter对象
+            writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
+            PrintWriter finalWriter = writer;
+            src.forEach((real, virtual) -> finalWriter.println(virtual.getIpAddress()));
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                // 关闭写入流
+                writer.close();
+            }
+        }
+    }
     private  void writeAttack01(Map<IpAddress,IpAddress> src) {
         PrintWriter writer = null;
         try {
@@ -359,7 +379,11 @@ public class MtdHostsManage implements Runnable{
             // 创建日志文件的PrintWriter对象
             writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
             PrintWriter finalWriter = writer;
-            realVirtualIpMap.forEach((host, ipAddress) -> finalWriter.println(host));
+            if (isPolymorphicMode){
+                realVirtualMap.forEach((real, virtual) -> finalWriter.println(real.getIpAddress()));
+            }else{
+                realVirtualIpMap.forEach((host, ipAddress) -> finalWriter.println(host));
+            }
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -398,6 +422,7 @@ public class MtdHostsManage implements Runnable{
                         host.getMacAddress(),virtualIp,virtualIdentity,virtualMfID,virtualGeoPosition,virtualDis,virtualNdnInfo);
                 realVirtualMap.put(host,virtualPolymorphicHost);
                 writeRealVirtualMap(realVirtualMap);
+                writePolymorphicAttackList(realVirtualMap);
                 writeLog(ip,"Successful transformation, new ones are:" + virtualPolymorphicHost);
                 break;
             }
@@ -406,21 +431,33 @@ public class MtdHostsManage implements Runnable{
     @Override
     public void run() {
         MtdMechanism mtdMechanism=new MtdMechanism();
-        //1-16 host  //17-19 server  //20-21 database
+        //ip mode 1-16 host  17-19 server  20-21 database
+        //polymorphic mode 1-32 host 33-35 server 36-37 database
         mtdMechanism.export();
         MtdMechanism.initSHH();
         hostToServer(MtdMechanism.serverHasHosts1,MtdMechanism.serverHasHosts2,MtdMechanism.serverHasHosts3);
         while(sign){
-            int[] host=chances(mtdMechanism.hfrMatrix,0);
+            int[] host = chances(mtdMechanism.hfrMatrix,0);
             System.out.println("chance host:"+ (host[0]+1) +",    mtd mechanism:" + (host[1]+1));
             writeLog("****************","chance host:"+ (host[0]+1) +",    mtd mechanism:" + (host[1]+1));
             IpAddress ip;
             //Splicing Strings to form host Ip addresses
-            String s=(121+((host[0])/4))+".0.0."+(1+((host[0]%4)));
-            ip= IpAddress.valueOf(s);
+            String ip_str;
+            Pair<IpAddress,IpAddress> ip_pair = null;
+            if (isPolymorphicMode){
+                Random random = new Random();
+                ip_str = String.format("10.1.%d.%d", vmNumber + 1, 12 + host[0]);
+                String ip_str2 = String.format("10.1.%d.%d", vmNumber + 1, Math.min(28 + host[0], 43));
+                ip_pair = Pair.of(IpAddress.valueOf(ip_str), IpAddress.valueOf(ip_str2));
+            }else{
+                ip_str = (121 + ((host[0])/4)) + ".0.0." + (1 + ((host[0] % 4)));
+            }
+
+            ip= IpAddress.valueOf(ip_str);
             if (host[1]==0){
                 if (isPolymorphicMode){
-                    polymorphicModeShuffle(ip);
+                    polymorphicModeShuffle(ip_pair.getLeft());
+                    polymorphicModeShuffle(ip_pair.getRight());
                 }else{
                     ipModeAddressShuffle(ip);
                 }
@@ -460,12 +497,15 @@ public class MtdHostsManage implements Runnable{
             }
 
 
-            int[] server=chances(mtdMechanism.hfrMatrix,16);
+            int[] server = chances(mtdMechanism.hfrMatrix,16);
             System.out.println("chance server:"+ (server[0]+1) +",    mtd mechanism:" + (server[1]+1));
             writeLog("****************","chance server:"+ (server[0]+1) +",    mtd mechanism:" + (server[1]+1));
             //Splicing Strings to form host Ip addresses
-            s=(121+((server[0])/4))+".0.0."+(1+((server[0]%4)));
-            ip= IpAddress.valueOf(s);
+            ip_str = (121 + ((server[0]) / 4)) + ".0.0." + (1 + (server[0] % 4));
+            if (isPolymorphicMode){
+                ip_str = String.format("10.1.%d.%d", vmNumber + 1, 28 + server[0]);
+            }
+            ip= IpAddress.valueOf(ip_str);
             if (server[1]==0){//ip transformation
                 if (isPolymorphicMode){
                     polymorphicModeShuffle(ip);
@@ -484,8 +524,11 @@ public class MtdHostsManage implements Runnable{
             System.out.println("chance database:" + (database[0]+1) + ",    mtd mechanism:" + (database[1]+1));
             writeLog("****************","chance database:"+ (database[0]+1) + ",    mtd mechanism:" + (database[1]+1));
             //Splicing Strings to form host Ip addresses
-            s=(121+((database[0])/4))+".0.0."+(1+((database[0]%4)));
-            ip= IpAddress.valueOf(s);
+            ip_str = (121 + ((database[0]) / 4)) + ".0.0." + (1 + (database[0] % 4));
+            if (isPolymorphicMode){
+                ip_str = String.format("10.1.%d.%d", vmNumber + 1, 47 + (database[0] + 1) % 4);
+            }
+            ip= IpAddress.valueOf(ip_str);
             if (database[1]==0){//ip transformation
                 if (isPolymorphicMode){
                     polymorphicModeShuffle(ip);
@@ -555,6 +598,38 @@ public class MtdHostsManage implements Runnable{
                 }
             }
             if (flag==true){
+                break;
+            }
+        }
+        return null;
+    }
+    public static int[] polymorphicChances(float[][] hfrMatrix,int left){
+        float sh=0;
+        float tempHost=0;
+        int right = 0;
+        if(left == 0){
+            right = 32;
+        }
+        else if(left == 32){
+            right = 35;
+        }
+        else right = 37;
+        for(int i = left; i < right; i++) {
+            for (int j = 0; j < 4; j++) {
+                sh+=hfrMatrix[i][j];
+            }
+        }
+        float rh= (float) Math.random() * sh;
+        boolean flag =false;//to exit two loop bodies
+        for(int i=left; i < right;i++) {
+            for (int j = 0; j < 4; j++) {
+                tempHost+=hfrMatrix[i][j];
+                if(tempHost>=rh){
+                    flag=true;
+                    return new int[]{i,j};
+                }
+            }
+            if (flag){
                 break;
             }
         }
