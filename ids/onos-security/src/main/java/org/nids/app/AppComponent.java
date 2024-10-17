@@ -18,16 +18,19 @@ package org.nids.app;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.nids.app.utility.GetFeature;
 import org.onlab.packet.*;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
+import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.criteria.*;
+import org.onosproject.net.host.HostService;
 import org.onosproject.net.packet.InboundPacket;
 import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.PacketProcessor;
@@ -43,11 +46,16 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.text.SimpleDateFormat;
 import java.io.*;
 import java.net.Socket;
 import java.util.*;
 
+import static org.nids.app.utility.Compute.calculateIpFeature;
+import static org.nids.app.utility.Compute.calculatePolymorphicFeature;
+import static org.nids.app.utility.GetFeature.getIpAddress;
+import static org.nids.app.utility.GetFeature.getPort;
+import static org.nids.app.utility.Log.writeFlowLog;
+import static org.nids.app.utility.Log.writeLog;
 import static org.onlab.util.Tools.get;
 
 /**
@@ -82,7 +90,10 @@ public class AppComponent implements SomeInterface {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected FlowRuleService flowRuleService;
 
-    private static final int FLOW_INFO_INTERVAL = 5000; // 收集流信息时间间隔,毫秒
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected HostService hostService;
+
+    public static final int FLOW_INFO_INTERVAL = 5000; // 收集流信息时间间隔,毫秒
 
     private ApplicationId appId;
 
@@ -95,8 +106,7 @@ public class AppComponent implements SomeInterface {
     private int pythonServerPort = 13131;
     private Socket socket;
 
-    public static String logFolderPath = System.getProperty("user.home") + "/ids_log";
-    public static String logPath = logFolderPath + "/ids.log";
+    private boolean isPolymorphicMode;
 
     @Activate
     protected void activate() {
@@ -113,7 +123,8 @@ public class AppComponent implements SomeInterface {
             // 定期运行FlowInfoProcessor
             timer.schedule(new FlowInfoProcessor(socket), 0, FLOW_INFO_INTERVAL);
         } catch (IOException e){
-            log.info("The program encountered a socket connection exception");
+            log.error("The program encountered a socket connection exception!");
+            writeLog("The program encountered a socket connection exception!");
             e.printStackTrace();
         }
         writeLog("ids activate!");
@@ -138,7 +149,8 @@ public class AppComponent implements SomeInterface {
             e.printStackTrace();
         }
         cfgService.unregisterProperties(getClass(), false);
-        log.info("OSDD Stopped");
+        log.info("IDS Stopped");
+        writeLog("IDS Stopped");
     }
 
     @Modified
@@ -155,39 +167,7 @@ public class AppComponent implements SomeInterface {
         log.info("Invoked");
     }
 
-    public <T> void writeLog(T elem1){
 
-        long milliSeconds = System.currentTimeMillis(); // 获取事件发生时间
-        Date d1 = new Date(milliSeconds);
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        String formattedDate = sdf.format(d1);
-        PrintWriter writer = null;
-        File folder = new File(logFolderPath);
-        if (!folder.exists()) {
-            folder.mkdirs();
-        }
-
-        File file = new File(logPath);
-        if (!file.exists()) {
-            try {
-                file.createNewFile();
-            }catch (IOException e){
-                e.printStackTrace();
-            }
-        }
-        try {
-            // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter(logPath, true));
-            writer.println("date:" + formattedDate + "\t" + "info:" + elem1);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            if (writer != null) {
-                // 关闭写入流
-                writer.close();
-            }
-        }
-    }
 
     // 包处理器
     private class InPacketProcessor implements PacketProcessor {
@@ -211,6 +191,8 @@ public class AppComponent implements SomeInterface {
 
         // 存放源ip地址
         Set<IpAddress> srcIpSet = new HashSet<>();
+        Set<String> srcIdentifications = new HashSet<>();
+
         // 存放ip地址与端口的映射
         Map<IpAddress, List<Integer>> ipPortMap = new HashMap<>();
 
@@ -222,55 +204,31 @@ public class AppComponent implements SomeInterface {
             this.socket = socket;
         }
 
-        private  void writeFlowLog(List<FlowEntry>  src) {
-
-            long millisSeconds = System.currentTimeMillis(); // 获取事件发生时间
-            Date d1 = new Date(millisSeconds);
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            String formattedDate = sdf.format(d1);
-            PrintWriter writer = null;
-            try {
-                // 创建日志文件的PrintWriter对象
-                writer = new PrintWriter(new FileWriter(logPath, false));
-                PrintWriter finalWriter = writer;
-                src.forEach((flowEntry) -> finalWriter.println("date:" + formattedDate + "\t" + " flows:" + flowEntry.toString())
-                );
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                if (writer != null) {
-                    // 关闭写入流
-                    writer.close();
+        private void analysePolymorphicFlow(DeviceId deviceId, List<FlowEntry> flowEntriesListById,
+                                   int flowListSize, int sumPacket, int sumByte){
+            if (flowListSize != 0) {
+                for (FlowEntry flowEntry : flowEntriesListById) {
+                    TrafficSelector selector = flowEntry.selector();
+                    // 获取源标识信息
+                    String srcInfo = GetFeature.getIdentification(selector);
+                    if (srcInfo != null) {
+                        srcIdentifications.add(srcInfo);
+                    }
+                    sumPacket += flowEntry.packets();
+                    sumByte += flowEntry.bytes();
                 }
+                calculatePolymorphicFeature(deviceId, sumPacket, sumByte, flowListSize, srcIdentifications,  dataFeature);
+//                writeLog(dataFeature.toString());
+                srcIdentifications.clear();
+                // TODO : 确认是否需要释放flowEntriesListById的内存，怎么释放
+            } else {
+                dataFeature.initFeature();
+                return;
             }
         }
-        // 计算用于检测攻击的流量特征值
-        // TODO ： 看看内存、速度等方面还有没有能优化的点
-        private void getFlowInfo(DeviceId deviceId) {
-            // ArrayList可以动态扩容的
-            List<FlowEntry> flowEntriesListById = new ArrayList<>(flowRuleService.getFlowRuleCount(deviceId,
-                    FlowEntry.FlowEntryState.ADDED));
-            // 获得设备流表项并放入列表
-            Iterable<FlowEntry> flowEntriesByState = flowRuleService.getFlowEntriesByState(deviceId,
-                    FlowEntry.FlowEntryState.ADDED);
-            // forEach的迭代器里不能随便删除，否则会引发异常
-            flowEntriesByState.forEach(flowEntry -> {
-                flowEntriesListById.add(flowEntry);
-            });
-            // 删除列表中固定流表项
-            Iterator iterator = flowEntriesListById.iterator();
-            while (iterator.hasNext()) {
-                FlowEntry flowEntry = (FlowEntry) iterator.next();
-                if (flowEntry.appId() == coreId.id() ||
-                        !(flowEntry.state().equals(FlowEntry.FlowEntryState.ADDED))) {
-                    iterator.remove();
-                }
-            }
-            writeFlowLog(flowEntriesListById);
-            int flowListSize = flowEntriesListById.size();
-            int sumPacket = 0;
-            int sumByte = 0;
 
+        private void analyseIpFlow(DeviceId deviceId, List<FlowEntry> flowEntriesListById,
+                                 int flowListSize, int sumPacket, int sumByte){
             if (flowListSize != 0) {
                 for (FlowEntry flowEntry : flowEntriesListById) {
                     TrafficSelector selector = flowEntry.selector();
@@ -300,67 +258,51 @@ public class AppComponent implements SomeInterface {
                     sumPacket += flowEntry.packets();
                     sumByte += flowEntry.bytes();
                 }
-                calculateFeature(deviceId, sumPacket, sumByte, flowListSize);
+                calculateIpFeature(deviceId, sumPacket, sumByte, flowListSize, srcIpSet, ipPortMap, dataFeature);
                 srcIpSet.clear();
                 ipPortMap.clear();
                 // TODO : 确认是否需要释放flowEntriesListById的内存，怎么释放
             } else {
-                this.dataFeature.initFeature();
+                dataFeature.initFeature();
                 return;
             }
         }
 
-        /**
-         * 从流表项中获取TCP、UDP源端口或目的端口号
-         *
-         * @param selector 流表项的流量选择器
-         * @param type     想要获取的类型，例如TCP_SRC
-         * @return 端口号
-         */
-        private Integer getPort(TrafficSelector selector, Criterion.Type type) {
-            Integer port = null;
-            if (type == Criterion.Type.TCP_SRC || type == Criterion.Type.TCP_DST) {
-                Criterion criterion = selector.getCriterion(type);
-                if (criterion instanceof TcpPortCriterion) {
-                    TcpPortCriterion tcpPortCriterion = (TcpPortCriterion) criterion;
-                    port = tcpPortCriterion.tcpPort().toInt();
-                }
-            } else if (type == Criterion.Type.UDP_SRC || type == Criterion.Type.UDP_DST) {
-                Criterion criterion = selector.getCriterion(type);
-                if (criterion instanceof UdpPortCriterion) {
-                    UdpPortCriterion udpPortCriterion = (UdpPortCriterion) criterion;
-                    port = udpPortCriterion.udpPort().toInt();
+        // 计算用于检测攻击的流量特征值
+        // TODO ： 看看内存、速度等方面还有没有能优化的点
+        private void getFlowInfo(DeviceId deviceId) {
+            // ArrayList可以动态扩容
+            List<FlowEntry> flowEntriesListById = new ArrayList<>(flowRuleService.getFlowRuleCount(deviceId,
+                    FlowEntry.FlowEntryState.ADDED));
+            // 获得设备流表项并放入列表
+            Iterable<FlowEntry> flowEntriesByState = flowRuleService.getFlowEntriesByState(deviceId,
+                    FlowEntry.FlowEntryState.ADDED);
+            // forEach的迭代器里不能随便删除，否则会引发异常
+            flowEntriesByState.forEach(flowEntry -> {
+                flowEntriesListById.add(flowEntry);
+            });
+            // 删除列表中固定流表项
+            Iterator iterator = flowEntriesListById.iterator();
+            while (iterator.hasNext()) {
+                FlowEntry flowEntry = (FlowEntry) iterator.next();
+                if (flowEntry.appId() == coreId.id() ||
+                        !(flowEntry.state().equals(FlowEntry.FlowEntryState.ADDED))) {
+                    iterator.remove();
                 }
             }
-            return port;
+            writeFlowLog(flowEntriesListById);
+            int flowListSize = flowEntriesListById.size();
+            int sumPacket = 0;
+            int sumByte = 0;
+            if (isPolymorphicMode) {
+                analysePolymorphicFlow(deviceId, flowEntriesListById, flowListSize, sumPacket, sumByte);
+            } else {
+                analyseIpFlow(deviceId, flowEntriesListById, flowListSize, sumPacket, sumByte);
+            }
+
         }
 
-        /**
-         * 获取源、目的IPv4或IPv6地址
-         *
-         * @param selector 流表项的流量选择器
-         * @param type     想要获取的类型，例如IPv4_SRC
-         * @return ip地址
-         */
-        private IpAddress getIpAddress(TrafficSelector selector, Criterion.Type type) {
-            IpAddress ipAddress = null;
-            if (type == Criterion.Type.IPV4_SRC
-                    || type == Criterion.Type.IPV4_DST) {
-                Criterion criterion = selector.getCriterion(type);
-                if (criterion instanceof IPCriterion) {
-                    IPCriterion IPv4Criterion = (IPCriterion) criterion;
-                    ipAddress = IPv4Criterion.ip().address();
-                }
-            } else if (type == Criterion.Type.IPV6_SRC
-                    || type == Criterion.Type.IPV6_DST) {
-                Criterion criterion = selector.getCriterion(type);
-                if (criterion instanceof IPCriterion) {
-                    IPCriterion IPv6Criterion = (IPCriterion) criterion;
-                    ipAddress = IPv6Criterion.ip().address();
-                }
-            }
-            return ipAddress;
-        }
+
 
         /**
          * 将ip与端口加入Map
@@ -380,52 +322,19 @@ public class AppComponent implements SomeInterface {
             }
         }
 
-        /**
-         * 计算特征
-         * @param deviceId 交换机ID
-         * @param sumPacket 流表项发送的总包数
-         * @param sumByte  流表项发送总字节数
-         * @param flowListSize 交换机存放了几条流表项
-         * @return
-         */
-        private void calculateFeature(DeviceId deviceId, int sumPacket, int sumByte, int flowListSize) {
-
-            int secondTime = FLOW_INFO_INTERVAL / 1000;
-            int portSum = 0;
-            double avgPacket = 0.0d;
-            double avgByte = 0.0d;
-            double portChange = 0.0d;
-            double flowChange = 0.0d;
-            double ipChange = 0.0d;
-            if (flowListSize != 0) {
-                if (sumPacket != 0)
-                    avgPacket = (double) sumPacket / flowListSize;
-                if (sumByte != 0)
-                    avgByte = (double) sumByte / flowListSize;
-                if(ipPortMap != null){
-                    for (IpAddress ipAddress : ipPortMap.keySet()) {
-                        portSum += ipPortMap.get(ipAddress).size();
-                    }
-                    if (portSum != 0)
-                        portChange = (double) portSum / secondTime;
-                }
-                flowChange = (double) flowListSize / secondTime;
-                if(srcIpSet != null && srcIpSet.size() != 0)
-                    ipChange = (double) srcIpSet.size() / secondTime;
-            }
-            // TODO : 需要加到判空里吗？
-            this.dataFeature.setFeature(deviceId, deviceId.toString(), avgPacket, avgByte,
-                    portChange, flowChange, ipChange);
-        }
 
         // TODO : 接受消息处还需斟酌
         @Override
         public void run() {
             // 获得交换机，并遍历
             writeLog("IDS run!");
+            if (hostService.getHosts().iterator().hasNext()){  //Indicates that the current mode is ip.
+                isPolymorphicMode = false;
+            }else{
+                isPolymorphicMode = true;
+            }
             deviceService.getDevices().forEach(device -> {
                 DeviceId id = device.id();
-                writeLog("Device id : " + id.toString());
                 // 得到该交换机的几个特征
                 getFlowInfo(id);
                 if(this.dataFeature.getId() != null){

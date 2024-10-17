@@ -21,6 +21,7 @@ public class DataFeature {
     public DataFeature() {
     }
 
+
     public DataFeature(DeviceId id,String stringId, double avgPacket, double avgByte, double portChange, double flowChange, double srcIPChange) {
         this.id = id;
         this.stringId = stringId;
