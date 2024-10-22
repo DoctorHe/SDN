@@ -1,5 +1,6 @@
 package org.nids.app.utility;
 
+import org.nids.app.AppComponent;
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.criteria.Criterion;
@@ -7,9 +8,12 @@ import org.onosproject.net.flow.criteria.IPCriterion;
 import org.onosproject.net.flow.criteria.TcpPortCriterion;
 import org.onosproject.net.flow.criteria.UdpPortCriterion;
 
+import java.util.Hashtable;
+
 public class GetFeature {
+
     /**
-     * 从流表项中获取TCP、UDP源端口或目的端口号
+     * 从流表项中获取TCP、UDP源端口或目的端口号，仅ip模态下可用
      *
      * @param selector 流表项的流量选择器
      * @param type     想要获取的类型，例如TCP_SRC
@@ -59,12 +63,31 @@ public class GetFeature {
         }
         return ipAddress;
     }
-    public static String getIdentification(TrafficSelector selector) {
-        String ipMatchString = "hdr.ipv4.srcAddr=";
-        String identification = null;
-        identification = selector.toString();
-        int index = identification.indexOf(ipMatchString);
-        identification = identification.substring(index + ipMatchString.length(), index + ipMatchString.length() + 9);
+
+    public static String getAttribution(String content, String matchContent) {
+        int index = content.indexOf(matchContent) + matchContent.length();
+        int index_end = index;
+        String type = null;
+        for (int i = index; i <= content.length(); ++i){
+            if (content.charAt(i) == ',') {
+                index_end = i;
+                break;
+            }
+        }
+        return content.substring(index, index_end);
+    }
+
+    public static String getType(TrafficSelector selector) {
+        String typeMatchString = "hdr.ethernet.ether_type=";
+        String selectorContent = selector.toString();
+        String type = getAttribution(selectorContent, typeMatchString);
+        return  type;
+    }
+
+    public static String getSourceIdentification(TrafficSelector selector) {
+        String type = getType(selector);
+        String matchString = AppComponent.polymorphicHashtable.get(type);
+        String identification = getAttribution(selector.toString(), matchString);
         return identification;
     }
 }

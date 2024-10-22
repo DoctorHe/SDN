@@ -23,7 +23,6 @@ import org.onlab.packet.*;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.FlowEntry;
@@ -50,12 +49,9 @@ import java.io.*;
 import java.net.Socket;
 import java.util.*;
 
-import static org.nids.app.utility.Compute.calculateIpFeature;
-import static org.nids.app.utility.Compute.calculatePolymorphicFeature;
-import static org.nids.app.utility.GetFeature.getIpAddress;
-import static org.nids.app.utility.GetFeature.getPort;
-import static org.nids.app.utility.Log.writeFlowLog;
-import static org.nids.app.utility.Log.writeLog;
+import static org.nids.app.utility.Compute.*;
+import static org.nids.app.utility.GetFeature.*;
+import static org.nids.app.utility.Log.*;
 import static org.onlab.util.Tools.get;
 
 /**
@@ -101,6 +97,7 @@ public class AppComponent implements SomeInterface {
 
     private Timer timer = new Timer();
 
+    public static Hashtable<String, String> polymorphicHashtable = new Hashtable<>();
 
     private String pythonServer = "localhost";
     private int pythonServerPort = 13131;
@@ -115,6 +112,10 @@ public class AppComponent implements SomeInterface {
 
         // 注册包处理,包处理器将会添加到现有包处理器列表当中
         packetService.addProcessor(inPacketProcessor, PacketProcessor.director(0));
+
+        // 填充模态信息
+        initPolymorphicHashtable();
+
         log.info("Packet Processor registered");
         try {
             // 这里创建时发生了异常，直接走向了catch
@@ -182,6 +183,12 @@ public class AppComponent implements SomeInterface {
         }
     }
 
+    private void initPolymorphicHashtable() {
+        polymorphicHashtable.put("0x8624", "hdr.ndn.name_tlv.components[0].value=");
+        polymorphicHashtable.put("0x800", "hdr.ipv4.srcAddr=");
+        polymorphicHashtable.put("0x27c0", "hdr.mf.src_guid=");
+        polymorphicHashtable.put("0x812", "hdr.id.srcIdentity=");
+    }
     private class FlowInfoProcessor extends TimerTask {
 
         private DataFeature dataFeature = new DataFeature();
@@ -210,7 +217,7 @@ public class AppComponent implements SomeInterface {
                 for (FlowEntry flowEntry : flowEntriesListById) {
                     TrafficSelector selector = flowEntry.selector();
                     // 获取源标识信息
-                    String srcInfo = GetFeature.getIdentification(selector);
+                    String srcInfo = GetFeature.getSourceIdentification(selector);
                     if (srcInfo != null) {
                         srcIdentifications.add(srcInfo);
                     }
