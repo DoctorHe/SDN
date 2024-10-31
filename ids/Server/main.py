@@ -5,8 +5,11 @@ import joblib
 
 
 def predict_attack(data_list):
-    data = np.array(data_list[0:6]).reshape(1, -1)
-    model = joblib.load("./model/svm.pkl")
+    #data = np.array(data_list[0:6]).reshape(1, -1)
+    data = np.array(data_list[0:4]).reshape(1, -1)
+    print(data)
+    model = joblib.load("./model/lightGBM.pkl")
+    #model = joblib.load("./model/svm.pkl")
     result_nparray = model.predict(data)
     result = bool(result_nparray[0])
     # 预测结果 0是False，1是Ture
@@ -18,7 +21,8 @@ def process_data(json_data):
     attack = False
     # process
     data_list = list(json_data.values())
-    data_list = data_list[3:]
+    #data_list = data_list[3:]
+    data_list = data_list[3:5] + data_list[6:]
     if predict_attack(data_list):
         attack = True
         json_data["attack"] = True
@@ -36,9 +40,9 @@ def handle_client(client_socket):
         # print(msg)
         # json_data是json数据
         json_data = json.loads(msg)
-        print("json数据", json_data)  # {'attack': False,'id': ,....}字典键值对
+        #print("original message : ", json_data)  # {'attack': False,'id': ,....}字典键值对
         modified_data, is_attack = process_data(json_data)
-        print("yaofasongde", modified_data)
+        print("send message : ", modified_data)
         response_data = json.dumps(modified_data)
         client_socket.send(("%s\n" % response_data).encode("utf-8"))
 

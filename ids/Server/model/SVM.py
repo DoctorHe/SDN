@@ -14,7 +14,8 @@ def GetData(dir='../data/collect_data.log'):
             array_data = d.split()[2:]
             line = [float(i) for i in array_data]
             label = line[-1]
-            dd = line[:-1]
+            dd = line[:2] + line[3:-1]
+            #dd = line[:-1]
             if label == 0:
                 data0.append(dd)
                 label0.append(label)
@@ -54,7 +55,7 @@ def GetAcc(pre_y, test_label):
 
 
 def classification(train_data, train_label, test_data, test_label):
-    model = SVC(C=0.5, kernel='linear')
+    model = SVC(C=0.6, kernel='linear')
     model.fit(train_data, train_label)
     joblib.dump(model, './svm.pkl')
     pre_y0 = model.predict(train_data)
