@@ -31,7 +31,8 @@ public class MtdHostsManage implements Runnable{
     private static String mtdLogPath = logFolderPath + "/mtd.log";
     private static String realVirtualIpLogPath = logFolderPath + "/realVirtualIpMap.log";
     private static String realVirtualLogPath = logFolderPath + "/realVirtualMap.log";
-    private static String interceptedHostIpPath = System.getProperty("user.home") + "/work_space/p4/bmv2/home/interceptedHostIp.log";
+    private static String interceptedHostIpPath = logFolderPath + "/interceptedHostIp.log";
+    private static String polymorphicInterceptedHostIpPath = System.getProperty("user.home") + "/work_space/p4/bmv2/home/interceptedHostIp.log";
 
     // save hosts in map
     public Map<Host,IpAddress> hostIpAddressMap = new HashMap<Host, IpAddress>() ;
@@ -50,6 +51,11 @@ public class MtdHostsManage implements Runnable{
     public Map<Host, Boolean> hostTM = new HashMap<Host, Boolean>();
     public int vmNumber;
     //get all hosts
+
+    public MtdHostsManage() {
+        writeLog("Launch mtd management", "");
+    }
+
     public MtdHostsManage(Iterable<Host> hosts) {
         beginGetAllHosts(hosts);
         writeLog("Launch mtd management in ip mode", hosts.toString());
@@ -62,8 +68,19 @@ public class MtdHostsManage implements Runnable{
                 "" +
                 " mtd management in polymorphic mode!", polymorphicHosts.toString());
     }
-
-    public void GetAllDevices(Iterable<Device> devices){
+    public void setHost(Iterable<Host> hosts) {
+        beginGetAllHosts(hosts);
+        writeLog("Launch mtd management in ip mode", hosts.toString());
+    }
+    public void setHost(int vmx) {
+        vmNumber = vmx;
+        beginGetAllHosts(vmx);
+        writeLog("Launch" +
+                "" +
+                "" +
+                " mtd management in polymorphic mode!", polymorphicHosts.toString());
+    }
+    public void getAllDevices(Iterable<Device> devices){
         int cnt = 0;
         for(Device device:devices){
             writeLog("device" + cnt, device.toString());
@@ -344,7 +361,7 @@ public class MtdHostsManage implements Runnable{
         PrintWriter writer = null;
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
+            writer = new PrintWriter(new FileWriter(polymorphicInterceptedHostIpPath, false));
             PrintWriter finalWriter = writer;
             src.forEach((real, virtual) -> finalWriter.println(virtual.getIpAddress()));
         } catch (IOException e) {
@@ -377,7 +394,11 @@ public class MtdHostsManage implements Runnable{
         PrintWriter writer = null;
         try {
             // 创建日志文件的PrintWriter对象
-            writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
+            if (isPolymorphicMode) {
+                writer = new PrintWriter(new FileWriter(polymorphicInterceptedHostIpPath, false));
+            } else {
+                writer = new PrintWriter(new FileWriter(interceptedHostIpPath, false));
+            }
             PrintWriter finalWriter = writer;
             if (isPolymorphicMode){
                 realVirtualMap.forEach((real, virtual) -> finalWriter.println(real.getIpAddress()));
@@ -544,7 +565,7 @@ public class MtdHostsManage implements Runnable{
                 writeLog(ip,"Port Successful transformation");
             }
             try {
-                Thread.sleep(5000);
+                Thread.sleep(4000);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }

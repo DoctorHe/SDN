@@ -35,7 +35,6 @@ import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.topology.TopologyEvent;
 import org.onosproject.net.topology.TopologyListener;
 import org.onosproject.net.topology.TopologyService;
-//import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.EventuallyConsistentMap;
 import org.onosproject.store.service.MultiValuedTimestamp;
 import org.onosproject.store.service.StorageService;
@@ -49,7 +48,6 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
-import javax.validation.constraints.Null;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 
@@ -230,17 +228,24 @@ public class ReactiveForwarding {
         topologyService.addListener(topologyListener);
 //        hostService.addListener(hostListener);
 
+        mtdHostsManage = new MtdHostsManage();
         //host manage
-        if (hostService.getHosts().iterator().hasNext()){  //Indicates that the current mode is ip.
-            mtdHostsManage = new MtdHostsManage(hostService.getHosts());
-            mtdHostsManage.isPolymorphicMode = false;
-        }else{
-            mtdHostsManage = new MtdHostsManage(0);
-            mtdHostsManage.isPolymorphicMode = true;
+        try {
+            if (deviceService.getDevices().iterator().hasNext()) {
+                Device device = deviceService.getDevices().iterator().next();
+                if (device.hwVersion().equals("Open vSwitch")) { //Indicates that the current mode is ip.
+                    mtdHostsManage.isPolymorphicMode = false;
+                    mtdHostsManage.setHost(hostService.getHosts());
+                } else {
+                    mtdHostsManage.isPolymorphicMode = true;
+                    mtdHostsManage.setHost(0);
+                }
+            }
+        }catch (Exception e){
+            e.printStackTrace();
         }
 
-
-        //mtdHostsManage.GetAllDevices(deviceService.getDevices());
+//        mtdHostsManage.getAllDevices(deviceService.getDevices());
 
         mtdHostsManage.startShift();
         mtdHostsManage.sign=true;
