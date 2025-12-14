@@ -7,10 +7,7 @@ import org.onosproject.net.Device;
 import org.onosproject.net.Host;
 import org.slf4j.Logger;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -23,7 +20,7 @@ public class MtdHostsManage implements Runnable{
     private final Logger log = getLogger(getClass());
     public boolean sign;//control the termination of threads
 
-    public boolean isPolymorphicMode;
+    public boolean isPolymorphicMode = true;
     // log path
     private static String logFolderPath = System.getProperty("user.home") + "/mtd_log";
     private static String hostIpAddressMapPath = logFolderPath + "/hostIpAddressMap.log";
@@ -32,9 +29,23 @@ public class MtdHostsManage implements Runnable{
     private static String realVirtualIpLogPath = logFolderPath + "/realVirtualIpMap.log";
     private static String realVirtualLogPath = logFolderPath + "/realVirtualMap.log";
     private static String interceptedHostIpPath = logFolderPath + "/interceptedHostIp.log";
-    private static String polymorphicInterceptedHostIpPath = System.getProperty("user.home") + "/work_space/p4/bmv2/home/interceptedHostIp.log";
+//    private static String polymorphicInterceptedHostIpPath = System.getProperty("user.home") + "/work_space/p4/bmv2/home/interceptedHostIp.log";
+private static String polymorphicInterceptedHostIpPath = System.getProperty("user.home") + "/mtd_log/interceptedHostIp.log";
+    // todo scp info
+    /** 课题二
+    private static String destinationUser = "kin";
+    private static String destinationHost = "10.190.96.96";
+    private static String destinationPath = "/home/kin/Desktop/mtd_log/";
+    private static String password = "Fiberhome@2020";
+    **/
 
-    // save hosts in map
+
+     private static String destinationUser =  "hello";
+     private static String destinationHost = "192.168.10.110";
+     private static String destinationPath = "/home/hello/hdu_home/mtd_log/";
+     private static String password = "Qwe123!!";
+
+     // save hosts in map
     public Map<Host,IpAddress> hostIpAddressMap = new HashMap<Host, IpAddress>() ;
     public Map<IpAddress,Host> IpAddressHostMap = new HashMap<IpAddress,Host>() ;
 
@@ -88,12 +99,15 @@ public class MtdHostsManage implements Runnable{
         }
     }
     public void beginGetAllHosts(int vmx){
-        for (int i = 64; i < 101; i++) {
+//        for (int i = 128; i <= 256; i++) {
+        for (int i = 128; i <= 156; i++) {
             PolymorphicHost polymorphicHost = new PolymorphicHost(vmx, i);
             polymorphicHosts.add(polymorphicHost);
             realVirtualMap.put(polymorphicHost, polymorphicHost);
         }
     }
+
+
 
     public void beginGetAllHosts(Iterable<Host> hosts){
         for(Host host:hosts){
@@ -218,7 +232,7 @@ public class MtdHostsManage implements Runnable{
 
     public Integer getRandomNdnName(){
         Random random = new Random();
-        Integer ndnName=202271720 + random.nextInt(8) * 100000 + random.nextInt(100) - 64;
+        Integer ndnName = 202271720 + random.nextInt(8) * 100000 + random.nextInt(100) - 64;
         return ndnName;
     }
 
@@ -373,6 +387,79 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
+    /**
+     * 使用 scp 命令将文件从本地传输到远程主机
+     *
+     * @param sourceFile       本地文件的路径
+     * @param destinationUser  远程主机的用户名
+     * @param destinationHost  远程主机的 IP 地址或主机名
+     * @param destinationPath  远程主机上目标文件的路径
+     * @return 如果文件传输成功返回 true，否则返回 false
+     */
+    public boolean transferFile(String sourceFile, String destinationUser, String destinationHost, String destinationPath) {
+        // 构建 scp 命令
+        String command = String.format("scp %s %s@%s:%s", sourceFile, destinationUser, destinationHost, destinationPath);
+
+        try {
+            // 执行命令
+            Process process = Runtime.getRuntime().exec(command);
+            int exitCode = process.waitFor();
+
+            // 检查命令执行结果
+            if (exitCode == 0) {
+                writeLog("info","File transferred successfully.");
+                return true;
+            } else {
+                System.err.println("File transfer failed with exit code: " + exitCode);
+                writeLog("File transfer failed with exit code: ", exitCode);
+                return false;
+            }
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 使用 sshpass 和 scp 将文件从本地传输到远程主机
+     *
+     * @param sourceFile       本地文件的路径
+     * @param destinationUser  远程主机的用户名
+     * @param destinationHost  远程主机的 IP 地址或主机名
+     * @param destinationPath  远程主机上目标文件的路径
+     * @param password        远程主机的密码
+     * @return 如果文件传输成功返回 true，否则返回 false
+     */
+    public static boolean transferFileWithPassword(String sourceFile, String destinationUser, String destinationHost, String destinationPath, String password) {
+        try {
+            // 使用 ProcessBuilder 传递参数（避免 Shell 解析问题）
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    "sshpass", "-p", password,
+                    "scp", "-o", "StrictHostKeyChecking=no", // 禁用主机密钥验证
+                    sourceFile,
+                    destinationUser + "@" + destinationHost + ":" + destinationPath
+            );
+
+            // 合并标准输出和错误流（便于调试）
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
+
+            // 读取命令输出（防止缓冲区阻塞）
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("[SCP Output] " + line); // 打印详细日志
+            }
+
+            // 等待命令执行完成
+            int exitCode = process.waitFor();
+            return exitCode == 0;
+
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
     private  void writeAttack01(Map<IpAddress,IpAddress> src) {
         PrintWriter writer = null;
         try {
@@ -387,6 +474,10 @@ public class MtdHostsManage implements Runnable{
                 // 关闭写入流
                 writer.close();
             }
+//            transferFileWithPassword(interceptedHostIpPath, "root", "10.190.96.141", "/root/mtd_log/", "Fiberhome@2020");
+            String filePath = isPolymorphicMode ? polymorphicInterceptedHostIpPath : interceptedHostIpPath;
+            transferFileWithPassword(filePath, destinationUser, destinationHost, destinationPath, password);
+
         }
     }
 
@@ -412,6 +503,9 @@ public class MtdHostsManage implements Runnable{
                 // 关闭写入流
                 writer.close();
             }
+            String filePath = isPolymorphicMode ? polymorphicInterceptedHostIpPath : interceptedHostIpPath;
+//            transferFileWithPassword(interceptedHostIpPath, "root", "10.190.96.141", "/root/mtd_log/", "Fiberhome@2020");
+            transferFileWithPassword(filePath, destinationUser, destinationHost, destinationPath, password);
         }
     }
 
@@ -430,7 +524,7 @@ public class MtdHostsManage implements Runnable{
     public void polymorphicModeShuffle(IpAddress ip){
         writeLog(ip.toString(), "try to identification shuffle.");
         for (PolymorphicHost host : polymorphicHosts){
-
+//            writeLog(host.getIpAddress().trim(),ip.toString().trim());
             if (host.getIpAddress().trim().equals(ip.toString().trim())){
                 String virtualIp = getRandomIp();
                 Integer virtualIdentity = getRandomIdentity();
@@ -449,6 +543,14 @@ public class MtdHostsManage implements Runnable{
             }
         }
     }
+    private int getRandomNumber() {
+        Random random = new Random();
+        int min = 76;
+//        int max = 204;
+        int max = 104;
+        return random.nextInt(max - min + 1) + min;
+    }
+
     @Override
     public void run() {
         MtdMechanism mtdMechanism=new MtdMechanism();
@@ -467,9 +569,10 @@ public class MtdHostsManage implements Runnable{
             Pair<IpAddress,IpAddress> ip_pair = null;
             if (isPolymorphicMode){
                 Random random = new Random();
-                ip_str = String.format("10.1.%d.%d", vmNumber + 1, 12 + host[0]);
-                String ip_str2 = String.format("10.1.%d.%d", vmNumber + 1, Math.min(28 + host[0], 43));
-                ip_pair = Pair.of(IpAddress.valueOf(ip_str), IpAddress.valueOf(ip_str2));
+//                ip_str = String.format("172.20.%d.%d", vmNumber + 1, 12 + host[0]);
+                ip_str = String.format("172.20.%d.%d", vmNumber + 1, getRandomNumber());
+                String ip_str2 = String.format("172.20.%d.%d", vmNumber + 1, getRandomNumber());
+                ip_pair = Pair.of(IpAddress.valueOf(ip_str2), IpAddress.valueOf(ip_str2));
             }else{
                 ip_str = (121 + ((host[0])/4)) + ".0.0." + (1 + ((host[0] % 4)));
             }
@@ -524,7 +627,7 @@ public class MtdHostsManage implements Runnable{
             //Splicing Strings to form host Ip addresses
             ip_str = (121 + ((server[0]) / 4)) + ".0.0." + (1 + (server[0] % 4));
             if (isPolymorphicMode){
-                ip_str = String.format("10.1.%d.%d", vmNumber + 1, 28 + server[0]);
+                ip_str = String.format("172.20.%d.%d", vmNumber + 1, 28 + server[0]);
             }
             ip= IpAddress.valueOf(ip_str);
             if (server[1]==0){//ip transformation
@@ -547,7 +650,7 @@ public class MtdHostsManage implements Runnable{
             //Splicing Strings to form host Ip addresses
             ip_str = (121 + ((database[0]) / 4)) + ".0.0." + (1 + (database[0] % 4));
             if (isPolymorphicMode){
-                ip_str = String.format("10.1.%d.%d", vmNumber + 1, 47 + (database[0] + 1) % 4);
+                ip_str = String.format("172.20.%d.%d", vmNumber + 1, 47 + (database[0] + 1) % 4);
             }
             ip= IpAddress.valueOf(ip_str);
             if (database[1]==0){//ip transformation

@@ -63,7 +63,7 @@ import static org.onlab.util.Tools.get;
                 "someProperty=Some Default String Value",
         })
 public class AppComponent implements SomeInterface {
-
+    HashMap map = new HashMap<>();
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     /**
@@ -89,7 +89,7 @@ public class AppComponent implements SomeInterface {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected HostService hostService;
 
-    public static final int FLOW_INFO_INTERVAL = 5000; // 收集流信息时间间隔,毫秒
+    public static final int FLOW_INFO_INTERVAL = 3000; // 收集流信息时间间隔,毫秒
 
     private ApplicationId appId;
 
@@ -99,7 +99,12 @@ public class AppComponent implements SomeInterface {
 
     public static Hashtable<String, String> polymorphicHashtable = new Hashtable<>();
 
-    private String pythonServer = "localhost";
+    // todo 更新起监听服务器的ip
+//    private String pythonServer = "localhost";
+//    private String pythonServer = "10.190.96.141";  //烽火
+//    private String pythonServer = "192.168.10.138"; //国防科大
+    String pythonServer = "10.190.96.149"; //课题二
+
     private int pythonServerPort = 13131;
     private Socket socket;
 
@@ -130,7 +135,6 @@ public class AppComponent implements SomeInterface {
         }
         writeLog("ids activate!");
         log.info("Started DDoS Defend");
-
     }
 
     @Deactivate
@@ -225,7 +229,6 @@ public class AppComponent implements SomeInterface {
                     sumByte += flowEntry.bytes();
                 }
                 calculatePolymorphicFeature(deviceId, sumPacket, sumByte, flowListSize, srcIdentifications,  dataFeature);
-//                writeLog(dataFeature.toString());
                 srcIdentifications.clear();
                 // TODO : 确认是否需要释放flowEntriesListById的内存，怎么释放
             } else {

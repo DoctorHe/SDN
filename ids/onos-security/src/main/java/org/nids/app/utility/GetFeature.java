@@ -8,8 +8,6 @@ import org.onosproject.net.flow.criteria.IPCriterion;
 import org.onosproject.net.flow.criteria.TcpPortCriterion;
 import org.onosproject.net.flow.criteria.UdpPortCriterion;
 
-import java.util.Hashtable;
-
 public class GetFeature {
 
     /**

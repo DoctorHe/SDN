@@ -1,31 +1,15 @@
 import socket
 import json
-from flask import Flask, jsonify
 import numpy as np
 import joblib
-import threading
 
-app = Flask(__name__)
-network_status = "safe"
-
-
-attack_count = 0
-normal_count = 0
-model = joblib.load("./model/lightGBM.pkl")
-#model = joblib.load("./model/svm.pkl")
-
-@app.route('/status', methods=['GET'])
-def get_status():
-    global network_status
-    status_info = [
-    {"status": network_status}
-    ]
-    return jsonify(status_info)
 
 def predict_attack(data_list):
     #data = np.array(data_list[0:6]).reshape(1, -1)
     data = np.array(data_list[0:4]).reshape(1, -1)
     print(data)
+    model = joblib.load("./model/lightGBM.pkl")
+    #model = joblib.load("./model/svm.pkl")
     result_nparray = model.predict(data)
     result = bool(result_nparray[0])
     # 预测结果 0是False，1是Ture
@@ -34,28 +18,14 @@ def predict_attack(data_list):
 
 
 def process_data(json_data):
-    global normal_count
-    global attack_count
-    global network_status
     attack = False
     # process
     data_list = list(json_data.values())
     #data_list = data_list[3:]
     data_list = data_list[3:5] + data_list[6:]
     if predict_attack(data_list):
-        network_status = "dangerous"
         attack = True
         json_data["attack"] = True
-        attack_count += 1
-    else:
-        normal_count += 1
-    #print(normal_count , attack_count, network_status)
-    if normal_count + attack_count >= 5:
-        if attack_count == 0:
-            network_status = "safe"
-        attack_count = 0
-        normal_count = 0
-        
     modified_data = json_data
     return modified_data, attack
 
@@ -76,13 +46,11 @@ def handle_client(client_socket):
         response_data = json.dumps(modified_data)
         client_socket.send(("%s\n" % response_data).encode("utf-8"))
 
-def flask_app():
-    app.run(debug=True, host='0.0.0.0', use_reloader=False)
 
-def socket_server():
+def main():
     # 获取本地主机名
-    #host = socket.gethostname()
-    host = '0.0.0.0'
+    host = socket.gethostname()
+
     # 设置一个端口
     port = 13131
     # creat server socket
@@ -105,11 +73,4 @@ def socket_server():
 
 
 if __name__ == '__main__':
-# 创建并启动Flask应用的线程
-    flask_thread = threading.Thread(target=flask_app)
-    flask_thread.start()
-
-# 创建并启动Socket服务器的线程
-    socket_thread = threading.Thread(target=socket_server)
-    socket_thread.start()
-    
+    main()

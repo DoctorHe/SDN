@@ -1,0 +1,109 @@
+/*
+ * Copyright 2024-present Open Networking Foundation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package dhr.agent;
+
+import dhr.agent.rest.WebRequest;
+import dhr.agent.utility.Log;
+import org.onosproject.cfg.ComponentConfigService;
+import org.onosproject.core.ApplicationId;
+import org.onosproject.core.CoreService;
+import org.onosproject.net.Device;
+import org.onosproject.net.device.DeviceService;
+import org.onosproject.store.service.StorageService;
+import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.Dictionary;
+import java.util.Properties;
+
+import static org.onlab.util.Tools.get;
+
+/**
+ * Skeletal ONOS application component.
+ */
+@Component(immediate = true,
+           service = {SomeInterface.class},
+           property = {
+               "someProperty=Some Default String Value",
+           })
+public class AppComponent implements SomeInterface {
+
+    private final Logger log = LoggerFactory.getLogger(getClass());
+
+    /** Some configurable property. */
+    private String someProperty;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected ComponentConfigService cfgService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected CoreService coreService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected StorageService storageService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected DeviceService deviceService;
+
+    @Reference
+    protected DhrManager dhrManager;
+
+    private WebRequest webRequest;
+    @Activate
+    protected void activate() {
+        cfgService.registerProperties(getClass());
+        ApplicationId appId = coreService.registerApplication("org.dhr.agent");
+        Log.writeLog(String.format("%s launch!", appId));
+        webRequest = new WebRequest();
+        if (dhrManager.getCurrentMode()) {
+            Log.writeLog( "polymorphic Network");
+        } else {
+            Log.writeLog("Ip Network");
+        }
+
+//        WebRequest.activateApplication("org.mtd.app");
+        log.info("Started");
+    }
+
+    @Deactivate
+    protected void deactivate() {
+        cfgService.unregisterProperties(getClass(), false);
+        webRequest.deactivateApplication("org.mtd.app");
+        Log.writeLog("DHR closed!");
+        log.info("Stopped");
+    }
+
+    @Modified
+    public void modified(ComponentContext context) {
+        Dictionary<?, ?> properties = context != null ? context.getProperties() : new Properties();
+        if (context != null) {
+            someProperty = get(properties, "someProperty");
+        }
+        log.info("Reconfigured");
+    }
+
+    @Override
+    public void someMethod() {
+        log.info("Invoked");
+    }
+
+}

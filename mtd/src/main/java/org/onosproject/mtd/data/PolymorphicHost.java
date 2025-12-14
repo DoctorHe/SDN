@@ -18,15 +18,15 @@ public class PolymorphicHost {
     public PolymorphicHost(){}
     public PolymorphicHost(Integer vmx, Integer index){
         this.macAddress = String.format("00:00:00:00:%02x:%02x", (vmx + 1) & 0xFF, index & 0xFF);
-        this.ipAddress= String.format("10.1.%d.%d", vmx + 1, index - 64 + 12);
+        this.ipAddress= String.format("172.20.%d.%d", vmx + 1, index - 64 + 12);
         this.identity=202271720 + vmx * 100000 + index - 64;
-        this.mfID = 1 + vmx * 100 + index - 64;
+        this.mfID = 1 + vmx * 1000 + index - 64;
         this.geoPosLat = index - 63;
         this.geoPosLon = float2CustomBin(-180 + vmx * 20 + (index - 64) * 0.4);
         this.disA = 0;
         this.disB = 0;
-        this.ndnName=202271720 + vmx * 100000 + index - 64;
-        this.ndnContent=2048 + vmx * 100 + index - 64;
+        this.ndnName = 202271720 + vmx * 100000 + index - 64;
+        this.ndnContent = 2048 + vmx * 1000 + index - 64;
     }
 
     public PolymorphicHost(String macAddress, String ipAddress, Integer identity, Integer mfID, Pair<Integer, Integer> geoPosition, Pair<Integer, Integer> dis, Pair<Integer, Integer> ndnInfo) {
