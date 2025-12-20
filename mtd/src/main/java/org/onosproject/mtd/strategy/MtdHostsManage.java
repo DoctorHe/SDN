@@ -248,7 +248,7 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
         return x;
     }
 
-    public <T> void writeLog(T elem1,T elem2){
+    public static <T> void writeLog(T elem1,T elem2){
 
         long milliSeconds = System.currentTimeMillis(); // 获取事件发生时间
         Date d1 = new Date(milliSeconds);

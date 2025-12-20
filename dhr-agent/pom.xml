@@ -100,21 +100,25 @@
             <version>${onos.version}</version>
             <scope>provided</scope>
         </dependency>
+        
+
     </dependencies>
 
     <build>
         <plugins>
             <plugin>
-                <groupId>org.apache.felix</groupId>
-                <artifactId>maven-bundle-plugin</artifactId>
-                <version>4.1.0</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <instructions>
-                        <Embed-Dependency>*;type=bundle</Embed-Dependency>
-                    </instructions>
-                </configuration>
-            </plugin>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>maven-bundle-plugin</artifactId>
+            <version>4.1.0</version>
+            <extensions>true</extensions>
+            <configuration>
+                <instructions>
+                    <Embed-Dependency>*;type=bundle</Embed-Dependency>
+                    <Import-Package>*</Import-Package>
+                    <Export-Package>dhr.agent.*;version="1.0.0.SNAPSHOT"</Export-Package>
+                </instructions>
+            </configuration>
+        </plugin>
             <plugin>
                 <groupId>org.onosproject</groupId>
                 <artifactId>onos-maven-plugin</artifactId>

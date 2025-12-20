@@ -72,11 +72,17 @@ public class MtdMechanism {
     public float[] pds=new float[2];
 
     //The selection probability of different MTD mechanisms on the host for jump frequency
-    public float[] pmh={0.5F, (float) 0.1, (float) 0.2, (float) 0.2};
+    // 静态变量，方便外部修改
+    public static float[] pmh={0.5F, (float) 0.1, (float) 0.2, (float) 0.2};
     //The selection probability of different MTD mechanisms on the server for jump frequency
-    public float[] pms={0.2F, (float) 0.4, (float) 0.2, (float) 0.2};
+    // 静态变量，方便外部修改
+    public static float[] pms={0.2F, (float) 0.4, (float) 0.2, (float) 0.2};
     //The selection probability of different MTD mechanisms on the database for jump frequency
-    public float[] pmd={0.2F, (float) 0.4, (float) 0.2, (float) 0.2};
+    // 静态变量，方便外部修改
+    public static float[] pmd={0.2F, (float) 0.4, (float) 0.2, (float) 0.2};
+    
+    // 调整系数，用于动态调整跳变频率
+    public static float adjustmentFactor = 1.0f;
 
     //final result matrix
     public float[][] hfrMatrix= new float[21][4];
@@ -164,33 +170,73 @@ public class MtdMechanism {
 //        System.out.println(Arrays.toString(pds));
     }
 
+    /**
+     * 更新主机上不同MTD机制的选择概率
+     * @param probabilities 概率数组
+     */
+    public static void updateHostMtdProbabilities(float[] probabilities) {
+        if (probabilities != null && probabilities.length == pmh.length) {
+            pmh = probabilities;
+        }
+    }
+    
+    /**
+     * 更新服务器上不同MTD机制的选择概率
+     * @param probabilities 概率数组
+     */
+    public static void updateServerMtdProbabilities(float[] probabilities) {
+        if (probabilities != null && probabilities.length == pms.length) {
+            pms = probabilities;
+        }
+    }
+    
+    /**
+     * 更新数据库上不同MTD机制的选择概率
+     * @param probabilities 概率数组
+     */
+    public static void updateDatabaseMtdProbabilities(float[] probabilities) {
+        if (probabilities != null && probabilities.length == pmd.length) {
+            pmd = probabilities;
+        }
+    }
+    
+    /**
+     * 更新调整系数
+     * @param factor 调整系数
+     */
+    public static void updateAdjustmentFactor(float factor) {
+        adjustmentFactor = factor;
+    }
+    
     //Final result frequency matrix
     public void hfrMatrix(){
         for(int i=0;i<16;i++){
             for(int j=0;j<4;j++){
-                hfrMatrix[i][j]=phs[i]*pmh[j];
+                // 考虑调整系数，调整跳变频率
+                hfrMatrix[i][j] = phs[i] * pmh[j] * adjustmentFactor;
             }
         }
         for(int i=0;i<3;i++){
             for(int j=0;j<4;j++){
-                hfrMatrix[i+16][j]=pss[i]*pms[j];
+                // 考虑调整系数，调整跳变频率
+                hfrMatrix[i+16][j] = pss[i] * pms[j] * adjustmentFactor;
             }
         }
         for(int i=0;i<2;i++){
             for(int j=0;j<4;j++){
-                hfrMatrix[i+19][j]=pds[i]*pmd[j];
+                // 考虑调整系数，调整跳变频率
+                hfrMatrix[i+19][j] = pds[i] * pmd[j] * adjustmentFactor;
             }
         }
         int count=1;
         for(int i=0;i<21;i++) {
             for (int j = 0; j < 4; j++) {
-//                System.out.print(hfrMatrix[i][j]+"\t");
+//                System.out.print(hfrMatrix[i][j] + "\t");
             }
-//            System.out.println(count+++"\t");
+//            System.out.println(count++ + "\t");
         }
-
     }
-
+    
     public void export(){
         cbv();
         phb();

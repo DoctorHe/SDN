@@ -37,7 +37,7 @@ public class ReactiveForwardMetrics {
         this.macAddress = macAddress;
     }
 
-    public void incremnetReplyPacket() {
+    public void incrementReplyPacket() {
         replyPacket++;
 
     }

@@ -87,7 +87,7 @@ public class AppComponent implements SomeInterface {
     @Deactivate
     protected void deactivate() {
         cfgService.unregisterProperties(getClass(), false);
-        webRequest.deactivateApplication("org.mtd.app");
+        WebRequest.deactivateApplication("org.mtd.app");
         Log.writeLog("DHR closed!");
         log.info("Stopped");
     }

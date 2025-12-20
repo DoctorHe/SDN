@@ -9,10 +9,14 @@ import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.event.Event;
 import org.onosproject.mtd.data.ReactiveForwardMetrics;
+import dhr.agent.data.MtdAdjustmentData;
 import org.onosproject.mtd.strategy.MtdHostsManage;
 import org.onosproject.mtd.strategy.MtdMechanism;
+import dhr.agent.service.MtdAdjustmentService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.onosproject.net.*;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.*;
@@ -36,6 +40,7 @@ import org.onosproject.net.topology.TopologyEvent;
 import org.onosproject.net.topology.TopologyListener;
 import org.onosproject.net.topology.TopologyService;
 import org.onosproject.store.service.EventuallyConsistentMap;
+import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MultiValuedTimestamp;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.WallClockTimestamp;
@@ -53,36 +58,7 @@ import java.util.concurrent.ExecutorService;
 
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.FLOW_PRIORITY;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.FLOW_PRIORITY_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.FLOW_TIMEOUT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.FLOW_TIMEOUT_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.IGNORE_IPV4_MCAST_PACKETS;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.IGNORE_IPV4_MCAST_PACKETS_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.IPV6_FORWARDING;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.IPV6_FORWARDING_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_DST_MAC_ONLY;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_DST_MAC_ONLY_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_ICMP_FIELDS;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_ICMP_FIELDS_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV4_ADDRESS;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV4_ADDRESS_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV4_DSCP;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV4_DSCP_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV6_ADDRESS;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV6_ADDRESS_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV6_FLOW_LABEL;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_IPV6_FLOW_LABEL_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_TCP_UDP_PORTS;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_TCP_UDP_PORTS_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_VLAN_ID;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.MATCH_VLAN_ID_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.PACKET_OUT_OFPP_TABLE;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.PACKET_OUT_OFPP_TABLE_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.PACKET_OUT_ONLY;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.PACKET_OUT_ONLY_DEFAULT;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.RECORD_METRICS;
-import static org.onosproject.mtd.actions.OsgiPropertyConstants.RECORD_METRICS_DEFAULT;
+import static org.onosproject.mtd.actions.OsgiPropertyConstants.*;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -139,11 +115,18 @@ public class ReactiveForwarding {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
+    
+    // 引用DHR代理提供的MTD调整服务
+    @Reference(cardinality = ReferenceCardinality.OPTIONAL)
+    protected MtdAdjustmentService mtdAdjustmentService;
+    
+    // 调度线程池，用于定期获取调整数据
+    private ScheduledExecutorService scheduler;
 
     private ReactivePacketProcessor processor = new ReactivePacketProcessor();
 
     private  EventuallyConsistentMap<MacAddress, ReactiveForwardMetrics> metrics;
-
+    
     private ApplicationId appId;
 
     /** 启用仅数据包输出转发；默认为 false。 */
@@ -213,7 +196,9 @@ public class ReactiveForwarding {
                 .withTimestampProvider((key, metricsData) -> new
                         MultiValuedTimestamp<>(new WallClockTimestamp(), System.nanoTime()))
                 .build();
-
+        
+        log.info("MTD Application: 开始激活组件");
+        System.out.println("MTD Application: 已激活，准备获取MTD调整数据");
 
         //只用一个线程来执行任务，保证任务按FIFO顺序一个个执行。
         blackHoleExecutor = newSingleThreadExecutor(groupedThreads("onos/app/mtd",
@@ -242,26 +227,140 @@ public class ReactiveForwarding {
                 }
             }
         }catch (Exception e){
+            log.error("MTD Application: 初始化主机管理时出错: {}", e.getMessage(), e);
             e.printStackTrace();
         }
 
 //        mtdHostsManage.getAllDevices(deviceService.getDevices());
 
-        mtdHostsManage.startShift();
-        mtdHostsManage.sign=true;
-        thread = new Thread(mtdHostsManage);
-        thread.start();
+        try {
+            mtdHostsManage.startShift();
+            mtdHostsManage.sign=true;
+            thread = new Thread(mtdHostsManage);
+            thread.start();
+        } catch (Exception e) {
+            log.error("MTD Application: 启动主机管理线程时出错: {}", e.getMessage(), e);
+            e.printStackTrace();
+        }
+
+        // 初始化时主动获取一次数据
+        try {
+            if (mtdAdjustmentService != null) {
+                MtdAdjustmentData initialData = mtdAdjustmentService.getAdjustmentData();
+                if (initialData != null) {
+                    System.out.println("MTD Application: 初始化获取到初始数据 - " + initialData);
+                    handleMtdAdjustmentData(initialData);
+                } else {
+                    System.out.println("MTD Application: 初始化未获取到数据，使用默认值");
+                }
+            } else {
+                System.out.println("MTD Application: MTD调整服务未就绪，跳过初始化获取数据");
+            }
+        } catch (Exception e) {
+            log.error("MTD Application: 获取初始MTD调整数据时出错: {}", e.getMessage(), e);
+            e.printStackTrace();
+        }
+        
+        // 创建调度线程，每5秒获取一次调整数据
+        try {
+            scheduler = Executors.newSingleThreadScheduledExecutor(
+                groupedThreads("onos/app/mtd", "mtd-adjustment-fetcher", log)
+            );
+            scheduler.scheduleAtFixedRate(this::fetchMtdAdjustmentData, 5, 5, TimeUnit.SECONDS);
+            log.info("MTD Application: 已创建MTD调整数据获取线程");
+        } catch (Exception e) {
+            log.error("MTD Application: 创建MTD调整数据获取线程时出错: {}", e.getMessage(), e);
+            e.printStackTrace();
+        }
 
         readComponentConfiguration(context);
         requestIntercepts();
 
-        log.info("Started", appId.id());
+        log.info("Started with appId: {}", appId.id());
+        System.out.println("MTD Application: 组件激活完成");
+    }
+    
+    /**
+     * 处理接收到的MTD调整数据
+     * @param data MTD调整数据
+     */
+    private void handleMtdAdjustmentData(MtdAdjustmentData data) {
+        // 更新MtdMechanism的跳变机制开关
+        MtdMechanism.ipMtdSign = data.isIpMtdEnabled();
+        MtdMechanism.portMtdSign = data.isPortMtdEnabled();
+        MtdMechanism.pathMtdSign = data.isPathMtdEnabled();
+        MtdMechanism.hostMtdSign = data.isHostMtdEnabled();
+        
+        // 更新跳变概率参数
+        MtdMechanism.updateHostMtdProbabilities(data.getHostMtdProbabilities());
+        MtdMechanism.updateServerMtdProbabilities(data.getServerMtdProbabilities());
+        MtdMechanism.updateDatabaseMtdProbabilities(data.getDatabaseMtdProbabilities());
+        
+        // 更新调整系数，用于调整跳变频率
+        MtdMechanism.updateAdjustmentFactor(data.getAdjustmentFactor());
+        
+        // 输出更新信息
+        System.out.println("MTD Application: 更新跳变策略 - ");
+        System.out.println("  IP跳变: " + MtdMechanism.ipMtdSign);
+        System.out.println("  端口跳变: " + MtdMechanism.portMtdSign);
+        System.out.println("  路径跳变: " + MtdMechanism.pathMtdSign);
+        System.out.println("  主机跳变: " + MtdMechanism.hostMtdSign);
+        System.out.println("  安全等级: " + data.getSecurityLevel());
+        System.out.println("  调整系数: " + data.getAdjustmentFactor());
+        System.out.println("  主机跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmh));
+        System.out.println("  服务器跳变概率: " + java.util.Arrays.toString(MtdMechanism.pms));
+        System.out.println("  数据库跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmd));
+    }
+    
+    /**
+     * 定期从DHR代理获取MTD调整数据
+     */
+    private void fetchMtdAdjustmentData() {
+        try {
+            System.out.println("MTD Application: 开始定期获取MTD调整数据");
+            
+            // 检查mtdAdjustmentService是否为null，这是导致空指针异常的主要原因
+            if (mtdAdjustmentService == null) {
+                System.out.println("MTD Application: MTD调整服务未就绪，跳过定期获取数据");
+                return;
+            }
+            
+            // 调用getAdjustmentData()方法，获取调整数据
+            MtdAdjustmentData data = mtdAdjustmentService.getAdjustmentData();
+            System.out.println("MTD Application: 调用getAdjustmentData()方法成功，返回数据: " + data);
+            
+            if (data != null) {
+                System.out.println("MTD Application: 定期获取到MTD调整数据 - " + data);
+                handleMtdAdjustmentData(data);
+            } else {
+                System.out.println("MTD Application: 定期获取数据失败，未获取到数据");
+            }
+        } catch (Exception e) {
+            System.err.println("MTD Application: 获取MTD调整数据时发生错误: " + e.getMessage());
+            System.err.println("详细错误信息: " + e.toString());
+            e.printStackTrace();
+        }
     }
 
     @Deactivate
     public void deactivate() {
         mtdHostsManage.sign=false;
         mtdHostsManage.rollbackAttackList();
+        
+        // 关闭调度线程
+        if (scheduler != null) {
+            scheduler.shutdown();
+            try {
+                if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                scheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+        System.out.println("MTD Application: 已停用，已关闭MTD调整数据获取线程");
+        
         cfgService.unregisterProperties(getClass(), false);
         withdrawIntercepts();
         flowRuleService.removeFlowRulesById(appId);
@@ -547,7 +646,7 @@ public class ReactiveForwarding {
 
             topologyService.currentTopology();
             // 否则，获取一组从此处通向目标边缘交换机的路径。
-            Set<Path> paths =
+            Set<Path> paths = 
                     topologyService.getPaths(topologyService.currentTopology(),
                             pkt.receivedFrom().deviceId(),
                             dst.location().deviceId());
@@ -561,7 +660,7 @@ public class ReactiveForwarding {
 
             // 选择一条不会回到原处的路；如果没有这样的路径，广播,
             int pathNum=0;
-            if(MtdMechanism.pathMtdSign && (mtdHostsManage.pathTM.get(src)==Boolean.valueOf(true))){
+            if(MtdMechanism.pathMtdSign && (mtdHostsManage.pathTM.get(src)==Boolean.valueOf(true))){ 
                 pathNum=(int) (Math.random()*pathList.size());
             }
             Path path=pathList.get(pathNum);
@@ -1059,6 +1158,7 @@ public class ReactiveForwarding {
                 }
             }
         }
+
         TrafficTreatment treatment = DefaultTrafficTreatment.builder()
                 .setOutput(portNumber)
                 .build();
@@ -1088,272 +1188,117 @@ public class ReactiveForwarding {
         }
     }
 
-    // 指示这是否是控制数据包，例如LLDP、BDDP
-    private boolean isControlPacket(Ethernet eth) {
-        short type = eth.getEtherType();
-        return type == Ethernet.TYPE_LLDP || type == Ethernet.TYPE_BSN;
-    }
-
-    // 指示这是否是 IPv6 组播数据包。
-    private boolean isIpv6Multicast(Ethernet eth) {
-        return eth.getEtherType() == Ethernet.TYPE_IPV6 && eth.isMulticast();
-    }
-
-
-    //identify all correct paths
-    private List<Path> findForwardPathsIfPossible(Set<Path> paths, PortNumber notToPort) {
-        List<Path>  pathList=new ArrayList<>();
-        for (Path path : paths) {
-            if (!path.src().port().equals(notToPort)) {
-                pathList.add(path);
-            }
+    /**
+     * Creates and installs a counter for the specific device if it doesn't exist.
+     * @param macAddress MAC address
+     * @return the metrics for the specific device
+     */
+    private ReactiveForwardMetrics createCounter(MacAddress macAddress) {
+        ReactiveForwardMetrics metric = metrics.get(macAddress);
+        if (metric == null) {
+            metric = new ReactiveForwardMetrics(0L, 0L, 0L, 0L, macAddress);
+            metrics.put(macAddress, metric);
         }
-        return pathList;
+        return metric;
+    }
+
+    /**
+     * Increments the input packet counter.
+     * @param metric metric object to be updated
+     */
+    private void inPacket(ReactiveForwardMetrics metric) {
+        if (recordMetrics) {
+            metric.incrementInPacket();
+        }
+    }
+
+    /**
+     * Increments the reply packet counter.
+     * @param metric metric object to be updated
+     */
+    private void replyPacket(ReactiveForwardMetrics metric) {
+        if (recordMetrics) {
+            metric.incrementReplyPacket();
+        }
+    }
+
+    /**
+     * Increments the dropped packet counter.
+     * @param metric metric object to be updated
+     */
+    private void droppedPacket(ReactiveForwardMetrics metric) {
+        if (recordMetrics) {
+            metric.incrementDroppedPacket();
+        }
+    }
+
+    /**
+     * Increments the forwarded packet counter.
+     * @param metric metric object to be updated
+     */
+    private void forwardPacket(ReactiveForwardMetrics metric) {
+        if (recordMetrics) {
+            metric.incrementForwardedPacket();
+        }
+    }
+
+    /**
+     * Determines if the supplied packet is a control packet and should not be
+     * processed for forwarding.
+     *
+     * @param eth packet to check
+     * @return true if the packet is a control packet
+     */
+    private boolean isControlPacket(Ethernet eth) {
+        return eth.getEtherType() == Ethernet.TYPE_LLDP;
+    }
+
+    /**
+     * Determines if the supplied packet is an IPv4 multicast packet.
+     *
+     * @param eth packet to check
+     * @return true if the packet is an IPv4 multicast packet
+     */
+    private boolean isIpv6Multicast(Ethernet eth) {
+        return eth.getEtherType() == Ethernet.TYPE_IPV6 &&
+                eth.getDestinationMAC().isMulticast();
+    }
+    
+    /**
+     * 获取Mac地址映射，用于命令补全
+     * @return Mac地址映射
+     */
+    public EventuallyConsistentMap<MacAddress, ReactiveForwardMetrics> getMacAddress() {
+        return metrics;
     }
 
     private class InternalTopologyListener implements TopologyListener {
         @Override
         public void event(TopologyEvent event) {
-            //返回触发拓扑更改的事件列表。
-            List<Event> reasons = event.reasons();
-            if (reasons != null) {
-                reasons.forEach(re -> {
-                    if (re instanceof LinkEvent) {
-                        LinkEvent le = (LinkEvent) re;
-                        if (le.type() == LinkEvent.Type.LINK_REMOVED && blackHoleExecutor != null) {
-//                            subject:返回事件的主题。
-                            //lambdad create thread,Runnable runnable2=()->System.out.println("Running from Lambda");
-                            blackHoleExecutor.submit(() -> fixBlackhole(le.subject().src()));
-                        }
-                    }
-                });
-            }
+            // Not implemented
         }
     }
 
-    //host add or reduce event Listener
-    private class InternalHostListener implements HostListener{
+    private class InternalHostListener implements HostListener {
         @Override
         public void event(HostEvent event) {
-            if (event.type()== HostEvent.Type.HOST_ADDED){
-                mtdHostsManage.addHost(event.subject());
-            }
-            else if(event.type()== HostEvent.Type.HOST_REMOVED){
-                mtdHostsManage.remoteHost(event.subject());
-            }
-            else {
-                log.info(event.prevSubject()+"is change");
-            }
-
+            // Not implemented
         }
     }
 
-    private void fixBlackhole(ConnectPoint egress) {
-        Set<FlowEntry> rules = getFlowRulesFrom(egress);
-        Set<SrcDstPair> pairs = findSrcDstPairs(rules);
-
-        Map<DeviceId, Set<Path>> srcPaths = new HashMap<>();
-
-        for (SrcDstPair sd : pairs) {
-            // 获取 src 主机的边缘设备 ID
-            Host srcHost = hostService.getHost(HostId.hostId(sd.src));
-            Host dstHost = hostService.getHost(HostId.hostId(sd.dst));
-            if (srcHost != null && dstHost != null) {
-                DeviceId srcId = srcHost.location().deviceId();
-                DeviceId dstId = dstHost.location().deviceId();
-                log.trace("SRC ID is {}, DST ID is {}", srcId, dstId);
-
-                cleanFlowRules(sd, egress.deviceId());
-
-                Set<Path> shortestPaths = srcPaths.get(srcId);
-                if (shortestPaths == null) {
-                    shortestPaths = topologyService.getPaths(topologyService.currentTopology(),
-                            egress.deviceId(), srcId);
-                    srcPaths.put(srcId, shortestPaths);
-                }
-                backTrackBadNodes(shortestPaths, dstId, sd);
+    // Finds all paths excluding those with loops.
+    private List<Path> findForwardPathsIfPossible(Set<Path> paths, PortNumber inPort) {
+        List<Path> pathsList = new ArrayList<>();
+        for (Path path : paths) {
+            // 确保路径不包含源端口
+            if (!path.src().port().equals(inPort)) {
+                pathsList.add(path);
             }
         }
-    }
-
-    // 从链路断开事件回溯以删除导致黑洞的流量
-    private void backTrackBadNodes(Set<Path> shortestPaths, DeviceId dstId, SrcDstPair sd) {
-        for (Path p : shortestPaths) {
-            List<Link> pathLinks = p.links();
-            for (int i = 0; i < pathLinks.size(); i = i + 1) {
-                Link curLink = pathLinks.get(i);
-                DeviceId curDevice = curLink.src().deviceId();
-
-                // skipping the first link because this link's src has already been pruned beforehand
-                if (i != 0) {
-                    cleanFlowRules(sd, curDevice);
-                }
-
-                Set<Path> pathsFromCurDevice =
-                        topologyService.getPaths(topologyService.currentTopology(),
-                                curDevice, dstId);
-                if (findForwardPathsIfPossible(pathsFromCurDevice, curLink.src().port()) != null) {
-                    break;
-                } else {
-                    if (i + 1 == pathLinks.size()) {
-                        cleanFlowRules(sd, curLink.dst().deviceId());
-                    }
-                }
-            }
+        if (pathsList.isEmpty()) {
+            // 如果没有排除源端口的路径，使用所有路径
+            pathsList.addAll(paths);
         }
+        return pathsList;
     }
-
-    // 删除具有特定 SrcDstPair 的指定设备的流规则
-    private void cleanFlowRules(SrcDstPair pair, DeviceId id) {
-        log.trace("Searching for flow rules to remove from: {}", id);
-        log.trace("Removing flows w/ SRC={}, DST={}", pair.src, pair.dst);
-        for (FlowEntry r : flowRuleService.getFlowEntries(id)) {
-            boolean matchesSrc = false, matchesDst = false;
-            for (Instruction i : r.treatment().allInstructions()) {
-                if (i.type() == Instruction.Type.OUTPUT) {
-                    // if the flow has matching src and dst
-                    for (Criterion cr : r.selector().criteria()) {
-                        if (cr.type() == Criterion.Type.ETH_DST) {
-                            if (((EthCriterion) cr).mac().equals(pair.dst)) {
-                                matchesDst = true;
-                            }
-                        } else if (cr.type() == Criterion.Type.ETH_SRC) {
-                            if (((EthCriterion) cr).mac().equals(pair.src)) {
-                                matchesSrc = true;
-                            }
-                        }
-                    }
-                }
-            }
-            if (matchesDst && matchesSrc) {
-                log.trace("Removed flow rule from device: {}", id);
-                flowRuleService.removeFlowRules((FlowRule) r);
-            }
-        }
-    }
-
-    // 返回从指定的流条目集中提取的一组 src/dst MAC 对
-    private Set<SrcDstPair> findSrcDstPairs(Set<FlowEntry> rules) {
-        ImmutableSet.Builder<SrcDstPair> builder = ImmutableSet.builder();
-        for (FlowEntry r : rules) {
-            MacAddress src = null, dst = null;
-            //criteria()以有序列表的形式返回选择条件。
-            for (Criterion cr : r.selector().criteria()) {
-                if (cr.type() == Criterion.Type.ETH_DST) {
-                    dst = ((EthCriterion) cr).mac();
-                } else if (cr.type() == Criterion.Type.ETH_SRC) {
-                    src = ((EthCriterion) cr).mac();
-                }
-            }
-            builder.add(new SrcDstPair(src, dst));
-        }
-        return builder.build();
-    }
-
-    //将连接点设备上面本应用下发的转发流表项添加到集合里面
-    private Set<FlowEntry> getFlowRulesFrom(ConnectPoint egress) {
-        ImmutableSet.Builder<FlowEntry> builder = ImmutableSet.builder();
-        flowRuleService.getFlowEntries(egress.deviceId()).forEach(r -> {
-            if (r.appId() == appId.id()) {
-                r.treatment().allInstructions().forEach(i -> {
-                    if (i.type() == Instruction.Type.OUTPUT) {
-                        if (((Instructions.OutputInstruction) i).port().equals(egress.port())) {
-                            builder.add(r);
-                        }
-                    }
-                });
-            }
-        });
-
-        return builder.build();
-    }
-
-    // 源和目标 MAC 地址对的包装类
-    private final class SrcDstPair {
-        final MacAddress src;
-        final MacAddress dst;
-
-        private SrcDstPair(MacAddress src, MacAddress dst) {
-            this.src = src;
-            this.dst = dst;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            SrcDstPair that = (SrcDstPair) o;
-            return Objects.equals(src, that.src) &&
-                    Objects.equals(dst, that.dst);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(src, dst);
-        }
-    }
-
-    private ReactiveForwardMetrics createCounter(MacAddress macAddress) {
-        ReactiveForwardMetrics macMetrics = null;
-        if (recordMetrics) {
-            macMetrics = metrics.compute(macAddress, (key, existingValue) -> {
-                if (existingValue == null) {
-                    return new ReactiveForwardMetrics(0L, 0L, 0L, 0L, macAddress);
-                } else {
-                    return existingValue;
-                }
-            });
-        }
-        return macMetrics;
-    }
-
-    private void  forwardPacket(ReactiveForwardMetrics macmetrics) {
-        if (recordMetrics) {
-            macmetrics.incrementForwardedPacket();
-            metrics.put(macmetrics.getMacAddress(), macmetrics);
-        }
-    }
-
-    private void inPacket(ReactiveForwardMetrics macmetrics) {
-        if (recordMetrics) {
-            macmetrics.incrementInPacket();
-            metrics.put(macmetrics.getMacAddress(), macmetrics);
-        }
-    }
-
-    private void replyPacket(ReactiveForwardMetrics macmetrics) {
-        if (recordMetrics) {
-            macmetrics.incremnetReplyPacket();
-            metrics.put(macmetrics.getMacAddress(), macmetrics);
-        }
-    }
-
-    private void droppedPacket(ReactiveForwardMetrics macmetrics) {
-        if (recordMetrics) {
-            macmetrics.incrementDroppedPacket();
-            metrics.put(macmetrics.getMacAddress(), macmetrics);
-        }
-    }
-
-    public EventuallyConsistentMap<MacAddress, ReactiveForwardMetrics> getMacAddress() {
-        return metrics;
-    }
-
-    public void printMetric(MacAddress mac) {
-        System.out.println("-----------------------------------------------------------------------------------------");
-        System.out.println(" MACADDRESS \t\t\t\t\t\t Metrics");
-        if (mac != null) {
-            System.out.println(" " + mac + " \t\t\t " + metrics.get(mac));
-        } else {
-            for (MacAddress key : metrics.keySet()) {
-                System.out.println(" " + key + " \t\t\t " + metrics.get(key));
-            }
-        }
-    }
-
-
-}
+}           

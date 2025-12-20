@@ -76,6 +76,9 @@
         <onos.app.category>default</onos.app.category>
         <onos.app.url>http://onosproject.org</onos.app.url>
         <onos.app.readme>ONOS OSGi bundle archetype.</onos.app.readme>
+        <bundle.symbolicName>${project.artifactId}</bundle.symbolicName>
+        <bundle.namespace>org.onosproject.mtd</bundle.namespace>
+        <bundle.export>true</bundle.export>
     </properties>
 
     <dependencies>
@@ -106,15 +109,47 @@
             <version>${onos.version}</version>
             <scope>provided</scope>
         </dependency>
+        
+        <!-- 添加对DHR agent的依赖，用于导入MTD调整服务 -->
+        <dependency>
+            <groupId>org.dhr</groupId>
+            <artifactId>dhr-agent</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
 
     </dependencies>
 
     <build>
         <plugins>
             <plugin>
-                <groupId>org.onosproject</groupId>
-                <artifactId>onos-maven-plugin</artifactId>
-            </plugin>
+            <groupId>org.onosproject</groupId>
+            <artifactId>onos-maven-plugin</artifactId>
+            <extensions>true</extensions>
+            <configuration>
+                <appName>${onos.app.name}</appName>
+                <appTitle>${onos.app.title}</appTitle>
+                <appOrigin>${onos.app.origin}</appOrigin>
+                <appCategory>${onos.app.category}</appCategory>
+                <appUrl>${onos.app.url}</appUrl>
+                <appReadme>${onos.app.readme}</appReadme>
+                <bundleSymbolicName>${bundle.symbolicName}</bundleSymbolicName>
+                <bundleNamespace>${bundle.namespace}</bundleNamespace>
+                <bundleExport>true</bundleExport>
+            </configuration>
+        </plugin>
+        <plugin>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>maven-bundle-plugin</artifactId>
+            <version>4.1.0</version>
+            <extensions>true</extensions>
+            <configuration>
+                <instructions>
+                    <Export-Package>org.onosproject.mtd.event;version="1.0.0.SNAPSHOT"</Export-Package>
+                    <Import-Package>dhr.agent.*;version="[1.0.0.SNAPSHOT,2.0.0.SNAPSHOT)",*</Import-Package>
+                </instructions>
+            </configuration>
+        </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
