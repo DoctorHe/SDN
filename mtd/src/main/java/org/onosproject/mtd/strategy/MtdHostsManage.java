@@ -30,7 +30,7 @@ public class MtdHostsManage implements Runnable{
     private static String realVirtualLogPath = logFolderPath + "/realVirtualMap.log";
     private static String interceptedHostIpPath = logFolderPath + "/interceptedHostIp.log";
 //    private static String polymorphicInterceptedHostIpPath = System.getProperty("user.home") + "/work_space/p4/bmv2/home/interceptedHostIp.log";
-private static String polymorphicInterceptedHostIpPath = System.getProperty("user.home") + "/mtd_log/interceptedHostIp.log";
+    private static String polymorphicInterceptedHostIpPath = System.getProperty("user.home") + "/mtd_log/interceptedHostIp.log";
     // todo scp info
     /** 课题二
     private static String destinationUser = "kin";
@@ -39,7 +39,10 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
     private static String password = "Fiberhome@2020";
     **/
 
-
+    /**
+     * 课题四
+     * 定义目标主机的用户名、IP地址、路径和密码
+     */
      private static String destinationUser =  "hello";
      private static String destinationHost = "192.168.10.110";
      private static String destinationPath = "/home/hello/hdu_home/mtd_log/";
@@ -62,6 +65,10 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
     public Map<Host, Boolean> hostTM = new HashMap<Host, Boolean>();
     public int vmNumber;
     //get all hosts
+    // 防御网络IP列表，用于存储不重复的IP地址
+    private List<String> defenseNetwork;
+    // 随机数生成器
+    private Random random = new Random();
 
     public MtdHostsManage() {
         writeLog("Launch mtd management", "");
@@ -141,7 +148,7 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
             }
             for(IpAddress ipAddress:host.ipAddresses()){
                 if (!realVirtualIpMap.containsKey(ipAddress)){
-                    realVirtualIpMap.put(ipAddress,IpAddress.valueOf(getRandomIp()));
+                    realVirtualIpMap.put(ipAddress, ipAddress);
                     writeLog(host,"add host success realVirtualIpMap");
                     writeRealVirtualIpMap(realVirtualIpMap);
                 }
@@ -180,7 +187,7 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
     }
 
     //shiftAddress
-    public void startShift(){
+    public void ipShiftTest(){
         writeLog("start shift", null);
         for (Map.Entry<IpAddress,IpAddress> entry: realVirtualIpMap.entrySet()) {
             IpAddress virtualIp=IpAddress.valueOf(getRandomIp());
@@ -474,9 +481,9 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
                 // 关闭写入流
                 writer.close();
             }
-//            transferFileWithPassword(interceptedHostIpPath, "root", "10.190.96.141", "/root/mtd_log/", "Fiberhome@2020");
-            String filePath = isPolymorphicMode ? polymorphicInterceptedHostIpPath : interceptedHostIpPath;
-            transferFileWithPassword(filePath, destinationUser, destinationHost, destinationPath, password);
+            // transferFileWithPassword(interceptedHostIpPath, "root", "10.190.96.141", "/root/mtd_log/", "Fiberhome@2020");
+            // String filePath = isPolymorphicMode ? polymorphicInterceptedHostIpPath : interceptedHostIpPath;
+            // transferFileWithPassword(filePath, destinationUser, destinationHost, destinationPath, password);
 
         }
     }
@@ -503,9 +510,9 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
                 // 关闭写入流
                 writer.close();
             }
-            String filePath = isPolymorphicMode ? polymorphicInterceptedHostIpPath : interceptedHostIpPath;
-//            transferFileWithPassword(interceptedHostIpPath, "root", "10.190.96.141", "/root/mtd_log/", "Fiberhome@2020");
-            transferFileWithPassword(filePath, destinationUser, destinationHost, destinationPath, password);
+            // String filePath = isPolymorphicMode ? polymorphicInterceptedHostIpPath : interceptedHostIpPath;
+            // transferFileWithPassword(interceptedHostIpPath, "root", "10.190.96.141", "/root/mtd_log/", "Fiberhome@2020");
+            // transferFileWithPassword(filePath, destinationUser, destinationHost, destinationPath, password);
         }
     }
 
@@ -550,6 +557,22 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
         int max = 104;
         return random.nextInt(max - min + 1) + min;
     }
+    
+    /**
+     * 生成防御网络IP列表
+     * @param subnets 子网数量
+     * @param hostsPerSubnet 每个子网的主机数量
+     * @return 防御网络IP列表
+     */
+    private List<String> generateDefenseNetwork(int subnets, int hostsPerSubnet) {
+        List<String> hosts = new ArrayList<>();
+        for (int i = 1; i <= subnets; i++) {
+            for (int j = 1; j <= hostsPerSubnet; j++) {
+                hosts.add(String.format("121.0.%d.%d", i, j));
+            }
+        }
+        return hosts;
+    }
 
     @Override
     public void run() {
@@ -574,7 +597,16 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
                 String ip_str2 = String.format("172.20.%d.%d", vmNumber + 1, getRandomNumber());
                 ip_pair = Pair.of(IpAddress.valueOf(ip_str2), IpAddress.valueOf(ip_str2));
             }else{
-                ip_str = (121 + ((host[0])/4)) + ".0.0." + (1 + ((host[0] % 4)));
+                // 如果防御网络列表为空，重新生成
+                if (defenseNetwork == null || defenseNetwork.isEmpty()) {
+                    defenseNetwork = generateDefenseNetwork(20, 25);
+                }
+                // 随机选择一个IP索引
+                int randomIndex = random.nextInt(defenseNetwork.size());
+                // 获取随机IP
+                ip_str = defenseNetwork.get(randomIndex);
+                // 将已选择的IP从列表中移除，确保不重复
+                defenseNetwork.remove(randomIndex);
             }
 
             ip= IpAddress.valueOf(ip_str);
@@ -668,7 +700,17 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
                 writeLog(ip,"Port Successful transformation");
             }
             try {
-                Thread.sleep(4000);
+                // 根据调整系数动态计算sleep时间，基础时间为4000毫秒
+                // adjustmentFactor越大，sleep时间越短，执行频率越高
+                int baseSleepTime = 4000;
+                // 确保调整系数不为0，避免除以0错误
+                float factor = Math.max(MtdMechanism.adjustmentFactor, 0.1f);
+                long sleepTime = Math.round(baseSleepTime / factor);
+                // 设置sleep时间的上下限，确保执行频率在合理范围内
+                sleepTime = Math.max(sleepTime, 1000); // 最短1秒
+                sleepTime = Math.min(sleepTime, 5000); // 最长5秒
+                Thread.sleep(sleepTime);
+                System.out.println("MTD Hosts Manage: 执行频率调整完成，当前调整系数: " + factor + ", 睡眠时间: " + sleepTime + "ms");
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -676,7 +718,8 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
     }
 
     //rhm,method that neither considers the host nor the mechanism
-//    @Override
+    /** 
+    @Override
     public void runRhm() {
 
         try {
@@ -686,14 +729,14 @@ private static String polymorphicInterceptedHostIpPath = System.getProperty("use
         }
         while(sign==true){
 
-            startShift();
+            ipShiftTest();
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }
-    }
+    }*/
 
     public static int[] chances(float[][] hfrMatrix,int p){
         float sh=0;

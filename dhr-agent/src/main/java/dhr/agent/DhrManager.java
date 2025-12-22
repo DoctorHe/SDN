@@ -90,7 +90,7 @@ public class DhrManager implements Runnable, MtdAdjustmentService {
         // 初始化应用ID
         appId = coreService.registerApplication("dhr.agent");
         
-        System.out.println("DHR Agent: 已激活，开始发送MTD调整事件");
+        System.out.println("DHR Agent: 已激活");
         
         // 启动数据发送线程并保存引用
         sendThread = new Thread(this);
@@ -164,7 +164,7 @@ public class DhrManager implements Runnable, MtdAdjustmentService {
             }
         }
         
-        System.out.println("DHR Agent: 已停用，停止发送MTD调整事件");
+        System.out.println("DHR Agent: 已停用");
     }
     
     public boolean getCurrentMode() {
@@ -195,10 +195,9 @@ public class DhrManager implements Runnable, MtdAdjustmentService {
                 
                 // 直接更新调整数据
                 setAdjustmentData(data);
-                System.out.println("DHR Agent: 已更新MTD调整数据 - " + data);
                 
                 // 每5秒更新一次数据
-                Thread.sleep(5000);
+                Thread.sleep(5000 + (int)(Math.random() * 15000));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;

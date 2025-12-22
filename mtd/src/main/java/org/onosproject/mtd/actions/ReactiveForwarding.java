@@ -56,6 +56,7 @@ import org.slf4j.Logger;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 
+import static dhr.agent.utility.Log.writeLog;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.mtd.actions.OsgiPropertyConstants.*;
@@ -198,7 +199,7 @@ public class ReactiveForwarding {
                 .build();
         
         log.info("MTD Application: 开始激活组件");
-        System.out.println("MTD Application: 已激活，准备获取MTD调整数据");
+        System.out.println("MTD Application: 已激活");
 
         //只用一个线程来执行任务，保证任务按FIFO顺序一个个执行。
         blackHoleExecutor = newSingleThreadExecutor(groupedThreads("onos/app/mtd",
@@ -216,6 +217,7 @@ public class ReactiveForwarding {
         mtdHostsManage = new MtdHostsManage();
         //host manage
         try {
+            System.out.println(deviceService.getDevices().toString());
             if (deviceService.getDevices().iterator().hasNext()) {
                 Device device = deviceService.getDevices().iterator().next();
                 if (device.hwVersion().equals("Open vSwitch")) { //Indicates that the current mode is ip.
@@ -234,7 +236,7 @@ public class ReactiveForwarding {
 //        mtdHostsManage.getAllDevices(deviceService.getDevices());
 
         try {
-            mtdHostsManage.startShift();
+            // mtdHostsManage.ipShiftTest();
             mtdHostsManage.sign=true;
             thread = new Thread(mtdHostsManage);
             thread.start();
@@ -245,17 +247,7 @@ public class ReactiveForwarding {
 
         // 初始化时主动获取一次数据
         try {
-            if (mtdAdjustmentService != null) {
-                MtdAdjustmentData initialData = mtdAdjustmentService.getAdjustmentData();
-                if (initialData != null) {
-                    System.out.println("MTD Application: 初始化获取到初始数据 - " + initialData);
-                    handleMtdAdjustmentData(initialData);
-                } else {
-                    System.out.println("MTD Application: 初始化未获取到数据，使用默认值");
-                }
-            } else {
-                System.out.println("MTD Application: MTD调整服务未就绪，跳过初始化获取数据");
-            }
+            fetchMtdAdjustmentData();
         } catch (Exception e) {
             log.error("MTD Application: 获取初始MTD调整数据时出错: {}", e.getMessage(), e);
             e.printStackTrace();
@@ -266,7 +258,7 @@ public class ReactiveForwarding {
             scheduler = Executors.newSingleThreadScheduledExecutor(
                 groupedThreads("onos/app/mtd", "mtd-adjustment-fetcher", log)
             );
-            scheduler.scheduleAtFixedRate(this::fetchMtdAdjustmentData, 5, 5, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::fetchMtdAdjustmentData, 5, 15, TimeUnit.SECONDS);
             log.info("MTD Application: 已创建MTD调整数据获取线程");
         } catch (Exception e) {
             log.error("MTD Application: 创建MTD调整数据获取线程时出错: {}", e.getMessage(), e);
@@ -300,16 +292,18 @@ public class ReactiveForwarding {
         MtdMechanism.updateAdjustmentFactor(data.getAdjustmentFactor());
         
         // 输出更新信息
-        System.out.println("MTD Application: 更新跳变策略 - ");
-        System.out.println("  IP跳变: " + MtdMechanism.ipMtdSign);
-        System.out.println("  端口跳变: " + MtdMechanism.portMtdSign);
-        System.out.println("  路径跳变: " + MtdMechanism.pathMtdSign);
-        System.out.println("  主机跳变: " + MtdMechanism.hostMtdSign);
-        System.out.println("  安全等级: " + data.getSecurityLevel());
-        System.out.println("  调整系数: " + data.getAdjustmentFactor());
-        System.out.println("  主机跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmh));
-        System.out.println("  服务器跳变概率: " + java.util.Arrays.toString(MtdMechanism.pms));
-        System.out.println("  数据库跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmd));
+        String info = "MTD Application: 更新跳变策略 -\n" +
+                "  IP跳变: " + MtdMechanism.ipMtdSign + "\n" +
+                "  端口跳变: " + MtdMechanism.portMtdSign + "\n" +
+                "  路径跳变: " + MtdMechanism.pathMtdSign + "\n" +
+                "  主机跳变: " + MtdMechanism.hostMtdSign + "\n" +
+                "  安全等级: " + data.getSecurityLevel() + "\n" +
+                "  调整系数: " + data.getAdjustmentFactor() + "\n" +
+                "  主机跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmh) + "\n" +
+                "  服务器跳变概率: " + java.util.Arrays.toString(MtdMechanism.pms) + "\n" +
+                "  数据库跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmd);
+        System.out.println(info);
+        writeLog(info);
     }
     
     /**
@@ -327,13 +321,12 @@ public class ReactiveForwarding {
             
             // 调用getAdjustmentData()方法，获取调整数据
             MtdAdjustmentData data = mtdAdjustmentService.getAdjustmentData();
-            System.out.println("MTD Application: 调用getAdjustmentData()方法成功，返回数据: " + data);
             
             if (data != null) {
-                System.out.println("MTD Application: 定期获取到MTD调整数据 - " + data);
+                System.out.println("MTD Application: 获取到MTD调整数据 - " + data);
                 handleMtdAdjustmentData(data);
             } else {
-                System.out.println("MTD Application: 定期获取数据失败，未获取到数据");
+                System.out.println("MTD Application: 获取数据失败，未获取到数据");
             }
         } catch (Exception e) {
             System.err.println("MTD Application: 获取MTD调整数据时发生错误: " + e.getMessage());
@@ -359,7 +352,7 @@ public class ReactiveForwarding {
                 Thread.currentThread().interrupt();
             }
         }
-        System.out.println("MTD Application: 已停用，已关闭MTD调整数据获取线程");
+        System.out.println("MTD Application: 已停用");
         
         cfgService.unregisterProperties(getClass(), false);
         withdrawIntercepts();
