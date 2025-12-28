@@ -104,35 +104,39 @@ public class DhrManager implements Runnable, MtdAdjustmentService {
         MtdAdjustmentData data = new MtdAdjustmentData();
         
         // 根据安全等级动态调整
-        int securityLevel = (int) (Math.random() * 3) + 1; // 1-3级
+        int securityLevel = (int) (Math.random() * 7) + 1; // 1-7级
         data.setSecurityLevel(securityLevel);
         
         // 安全等级越高，调整系数越大，跳变频率越高
-        data.setAdjustmentFactor(1.0f + (securityLevel - 1) * 0.5f);
+        // 系数控制在1~8之间
+        float factor = (7.0f/6.0f) * securityLevel - (1.0f/6.0f);
+        // 确保系数在1~8之间
+        factor = Math.max(1.0f, Math.min(8.0f, factor));
+        data.setAdjustmentFactor(factor);
         
         // 根据安全等级调整机制开关
         data.setIpMtdEnabled(true);
         data.setPortMtdEnabled(securityLevel >= 2);
         data.setPathMtdEnabled(true);
-        data.setHostMtdEnabled(securityLevel >= 3);
+        data.setHostMtdEnabled(securityLevel >= 4);
         
         // 调整概率分布
         float[] hostProbs = new float[4];
         float[] serverProbs = new float[4];
         float[] databaseProbs = new float[4];
         
-        if (securityLevel == 1) {
-            // 低安全等级：更倾向于IP跳变
+        if (securityLevel <= 2) {
+            // 低安全等级（1-2级）：更倾向于IP跳变
             hostProbs = new float[]{0.7f, 0.1f, 0.1f, 0.1f};
             serverProbs = new float[]{0.5f, 0.2f, 0.2f, 0.1f};
             databaseProbs = new float[]{0.5f, 0.2f, 0.2f, 0.1f};
-        } else if (securityLevel == 2) {
-            // 中安全等级：均衡分布
+        } else if (securityLevel <= 4) {
+            // 中安全等级（3-4级）：均衡分布
             hostProbs = new float[]{0.4f, 0.3f, 0.2f, 0.1f};
             serverProbs = new float[]{0.3f, 0.3f, 0.2f, 0.2f};
             databaseProbs = new float[]{0.3f, 0.3f, 0.2f, 0.2f};
         } else {
-            // 高安全等级：更倾向于多种跳变机制
+            // 高安全等级（5-7级）：更倾向于多种跳变机制
             hostProbs = new float[]{0.3f, 0.3f, 0.2f, 0.2f};
             serverProbs = new float[]{0.2f, 0.4f, 0.2f, 0.2f};
             databaseProbs = new float[]{0.2f, 0.4f, 0.2f, 0.2f};

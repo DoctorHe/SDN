@@ -11,6 +11,8 @@ import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.mtd.data.ReactiveForwardMetrics;
 import dhr.agent.data.MtdAdjustmentData;
+import org.onosproject.mtd.experiment.TwoScemaProcessor;
+import org.onosproject.mtd.experiment.WoLFMTD;
 import org.onosproject.mtd.strategy.MtdHostsManage;
 import org.onosproject.mtd.strategy.MtdMechanism;
 import dhr.agent.service.MtdAdjustmentService;
@@ -58,6 +60,7 @@ import java.util.concurrent.ExecutorService;
 
 import static dhr.agent.utility.Log.writeLog;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import static org.onlab.util.Tools.get;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.mtd.actions.OsgiPropertyConstants.*;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -83,7 +86,8 @@ import static org.slf4j.LoggerFactory.getLogger;
                 MATCH_TCP_UDP_PORTS + ":Boolean=" + MATCH_TCP_UDP_PORTS_DEFAULT,
                 MATCH_ICMP_FIELDS + ":Boolean=" + MATCH_ICMP_FIELDS_DEFAULT,
                 IGNORE_IPV4_MCAST_PACKETS + ":Boolean=" + IGNORE_IPV4_MCAST_PACKETS_DEFAULT,
-                RECORD_METRICS + ":Boolean=" + RECORD_METRICS_DEFAULT
+                RECORD_METRICS + ":Boolean=" + RECORD_METRICS_DEFAULT,
+                FREQ_ADJUST_METHOD + ":String=" + FREQ_ADJUST_METHOD_DEFAULT
         }
 )
 public class ReactiveForwarding {
@@ -116,13 +120,6 @@ public class ReactiveForwarding {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DeviceService deviceService;
-    
-    // 引用DHR代理提供的MTD调整服务
-    @Reference(cardinality = ReferenceCardinality.OPTIONAL)
-    protected MtdAdjustmentService mtdAdjustmentService;
-    
-    // 调度线程池，用于定期获取调整数据
-    private ScheduledExecutorService scheduler;
 
     private ReactivePacketProcessor processor = new ReactivePacketProcessor();
 
@@ -183,6 +180,145 @@ public class ReactiveForwarding {
 
     private MtdHostsManage mtdHostsManage;
     Thread thread;
+    
+    // 引用DHR代理提供的MTD调整服务
+    @Reference(cardinality = ReferenceCardinality.OPTIONAL, bind = "bindMtdAdjustmentService", unbind = "unbindMtdAdjustmentService")
+    protected MtdAdjustmentService mtdAdjustmentService;
+    
+    // Inner class to handle DHR-agent interactions and isolate dependencies
+    private class DhrAgentHandler {
+        
+        // 从外部类传递的MTD调整服务引用
+        private final MtdAdjustmentService mtdAdjustmentService;
+        
+        // 调度线程池，用于定期获取调整数据
+        private ScheduledExecutorService scheduler;
+        
+        /**
+         * 处理接收到的MTD调整数据
+         * @param data MTD调整数据
+         */
+        private void handleMtdAdjustmentData(MtdAdjustmentData data) {
+            // 更新MtdMechanism的跳变机制开关
+            MtdMechanism.ipMtdSign = data.isIpMtdEnabled();
+            MtdMechanism.portMtdSign = data.isPortMtdEnabled();
+            MtdMechanism.pathMtdSign = data.isPathMtdEnabled();
+            MtdMechanism.hostMtdSign = data.isHostMtdEnabled();
+            
+            // 更新跳变概率参数
+            MtdMechanism.updateHostMtdProbabilities(data.getHostMtdProbabilities());
+            MtdMechanism.updateServerMtdProbabilities(data.getServerMtdProbabilities());
+            MtdMechanism.updateDatabaseMtdProbabilities(data.getDatabaseMtdProbabilities());
+            
+            // 更新调整系数，用于调整跳变频率
+            MtdMechanism.updateAdjustmentFactor(data.getAdjustmentFactor());
+            
+            // 输出更新信息
+            String info = "MTD Application: 更新跳变策略 -\n" +
+                    "  IP跳变: " + MtdMechanism.ipMtdSign + "\n" +
+                    "  端口跳变: " + MtdMechanism.portMtdSign + "\n" +
+                    "  路径跳变: " + MtdMechanism.pathMtdSign + "\n" +
+                    "  主机跳变: " + MtdMechanism.hostMtdSign + "\n" +
+                    "  安全等级: " + data.getSecurityLevel() + "\n" +
+                    "  调整系数: " + data.getAdjustmentFactor() + "\n" +
+                    "  主机跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmh) + "\n" +
+                    "  服务器跳变概率: " + java.util.Arrays.toString(MtdMechanism.pms) + "\n" +
+                    "  数据库跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmd);
+            System.out.println(info);
+            writeLog(info);
+        }
+        
+        /**
+         * 定期从DHR代理获取MTD调整数据
+         */
+        private void fetchMtdAdjustmentData() {
+            try {
+                System.out.println("MTD Application: 开始定期获取MTD调整数据");
+                
+                // 检查mtdAdjustmentService是否为null，这是导致空指针异常的主要原因
+                if (mtdAdjustmentService == null) {
+                    System.out.println("MTD Application: DHR-agent未就绪");
+                    return;
+                }
+                
+                // 调用getAdjustmentData()方法，获取调整数据
+                MtdAdjustmentData data = mtdAdjustmentService.getAdjustmentData();
+                
+                if (data != null) {
+                    System.out.println("MTD Application: 获取到MTD调整数据 - " + data);
+                    handleMtdAdjustmentData(data);
+                } else {
+                    System.out.println("MTD Application: 获取数据失败，未获取到数据");
+                }
+            } catch (Exception e) {
+                System.err.println("MTD Application: 获取MTD调整数据时发生错误: " + e.getMessage());
+                System.err.println("详细错误信息: " + e.toString());
+                e.printStackTrace();
+            }
+        }
+        
+        /**
+         * 构造函数，接收MTD调整服务实例
+         * @param mtdAdjustmentService MTD调整服务实例
+         */
+        public DhrAgentHandler(MtdAdjustmentService mtdAdjustmentService) {
+            this.mtdAdjustmentService = mtdAdjustmentService;
+        }
+        
+        /**
+         * 初始化DHR代理处理程序
+         */
+        public void init() {
+            // 初始化时主动获取一次数据
+            try {
+                fetchMtdAdjustmentData();
+            } catch (Exception e) {
+                log.error("MTD Application: 获取初始MTD调整数据时出错: {}", e.getMessage(), e);
+                e.printStackTrace();
+            }
+            
+            // 创建调度线程，每5秒获取一次调整数据
+            try {
+                scheduler = Executors.newSingleThreadScheduledExecutor(
+                    groupedThreads("onos/app/mtd", "mtd-adjustment-fetcher", log)
+                );
+                scheduler.scheduleAtFixedRate(this::fetchMtdAdjustmentData, 5, 15, TimeUnit.SECONDS);
+                log.info("MTD Application: 已创建MTD调整数据获取线程");
+            } catch (Exception e) {
+                log.error("MTD Application: 创建MTD调整数据获取线程时出错: {}", e.getMessage(), e);
+                e.printStackTrace();
+            }
+        }
+        
+        /**
+         * 关闭DHR代理处理程序
+         */
+        public void close() {
+            // 关闭调度线程
+            if (scheduler != null) {
+                scheduler.shutdown();
+                try {
+                    if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                        scheduler.shutdownNow();
+                    }
+                } catch (InterruptedException e) {
+                    scheduler.shutdownNow();
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+    
+    // Frequency adjustment method options
+    private enum FrequencyAdjustmentMethod {
+        DHR_AGENT, TWO_SCHEMA, WOLF_MTD
+    }
+    
+    // Instances for different frequency adjustment methods
+    private DhrAgentHandler dhrAgentHandler;
+    private TwoScemaProcessor twoScemaProcessor;
+    private WoLFMTD wolfMTD;
+    private ScheduledExecutorService freqAdjustScheduler;
 
     @Activate
     public void activate(ComponentContext context) {
@@ -245,113 +381,143 @@ public class ReactiveForwarding {
             e.printStackTrace();
         }
 
-        // 初始化时主动获取一次数据
-        try {
-            fetchMtdAdjustmentData();
-        } catch (Exception e) {
-            log.error("MTD Application: 获取初始MTD调整数据时出错: {}", e.getMessage(), e);
-            e.printStackTrace();
-        }
-        
-        // 创建调度线程，每5秒获取一次调整数据
-        try {
-            scheduler = Executors.newSingleThreadScheduledExecutor(
-                groupedThreads("onos/app/mtd", "mtd-adjustment-fetcher", log)
-            );
-            scheduler.scheduleAtFixedRate(this::fetchMtdAdjustmentData, 5, 15, TimeUnit.SECONDS);
-            log.info("MTD Application: 已创建MTD调整数据获取线程");
-        } catch (Exception e) {
-            log.error("MTD Application: 创建MTD调整数据获取线程时出错: {}", e.getMessage(), e);
-            e.printStackTrace();
-        }
-
+        // Read configuration first to get the selected frequency adjustment method
         readComponentConfiguration(context);
+        
+        // Initialize the selected frequency adjustment method
+        initFrequencyAdjustmentMethod();
+
         requestIntercepts();
 
         log.info("Started with appId: {}", appId.id());
         System.out.println("MTD Application: 组件激活完成");
     }
-    
+    private FrequencyAdjustmentMethod freqAdjustMethod;
     /**
-     * 处理接收到的MTD调整数据
-     * @param data MTD调整数据
+     * Initialize the selected frequency adjustment method
      */
-    private void handleMtdAdjustmentData(MtdAdjustmentData data) {
-        // 更新MtdMechanism的跳变机制开关
-        MtdMechanism.ipMtdSign = data.isIpMtdEnabled();
-        MtdMechanism.portMtdSign = data.isPortMtdEnabled();
-        MtdMechanism.pathMtdSign = data.isPathMtdEnabled();
-        MtdMechanism.hostMtdSign = data.isHostMtdEnabled();
+    private void initFrequencyAdjustmentMethod() {
+        // Clean up any existing instances first
+            // Current selected frequency adjustment method
+        freqAdjustMethod = FrequencyAdjustmentMethod.DHR_AGENT;
+        // freqAdjustMethod = FrequencyAdjustmentMethod.TWO_SCHEMA;
+        // freqAdjustMethod = FrequencyAdjustmentMethod.WOLF_MTD;
+        cleanupFrequencyAdjustmentMethod();
         
-        // 更新跳变概率参数
-        MtdMechanism.updateHostMtdProbabilities(data.getHostMtdProbabilities());
-        MtdMechanism.updateServerMtdProbabilities(data.getServerMtdProbabilities());
-        MtdMechanism.updateDatabaseMtdProbabilities(data.getDatabaseMtdProbabilities());
-        
-        // 更新调整系数，用于调整跳变频率
-        MtdMechanism.updateAdjustmentFactor(data.getAdjustmentFactor());
-        
-        // 输出更新信息
-        String info = "MTD Application: 更新跳变策略 -\n" +
-                "  IP跳变: " + MtdMechanism.ipMtdSign + "\n" +
-                "  端口跳变: " + MtdMechanism.portMtdSign + "\n" +
-                "  路径跳变: " + MtdMechanism.pathMtdSign + "\n" +
-                "  主机跳变: " + MtdMechanism.hostMtdSign + "\n" +
-                "  安全等级: " + data.getSecurityLevel() + "\n" +
-                "  调整系数: " + data.getAdjustmentFactor() + "\n" +
-                "  主机跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmh) + "\n" +
-                "  服务器跳变概率: " + java.util.Arrays.toString(MtdMechanism.pms) + "\n" +
-                "  数据库跳变概率: " + java.util.Arrays.toString(MtdMechanism.pmd);
-        System.out.println(info);
-        writeLog(info);
+        switch (freqAdjustMethod) {
+            case DHR_AGENT:
+                log.info("MTD Application: 使用 DHR-AGENT 调整频率");
+                try {
+                    dhrAgentHandler = new DhrAgentHandler(mtdAdjustmentService);
+                    dhrAgentHandler.init();
+                } catch (Exception e) {
+                    log.error("MTD Application: 初始化DHR代理处理程序时出错: {}", e.getMessage(), e);
+                    e.printStackTrace();
+                }
+                break;
+                
+            case TWO_SCHEMA:
+                log.info("MTD Application: 使用 TWO-SCHEMA 调整频率");
+                twoScemaProcessor = new TwoScemaProcessor(2, 3, 2);
+                twoScemaProcessor.start();
+                break;
+                
+            case WOLF_MTD:
+                log.info("MTD Application: 使用 WOLF-MTD 调整频率");
+                wolfMTD = new WoLFMTD();
+                // Start a scheduler to periodically update the frequency
+                freqAdjustScheduler = Executors.newSingleThreadScheduledExecutor(
+                    groupedThreads("onos/app/mtd", "wolf-mtd-scheduler", log)
+                );
+                freqAdjustScheduler.scheduleAtFixedRate(this::updateWolfMtdFrequency, 5, 15, TimeUnit.SECONDS);
+                break;
+        }
     }
     
     /**
-     * 定期从DHR代理获取MTD调整数据
+     * 绑定MTD调整服务
+     * @param service MTD调整服务实例
      */
-    private void fetchMtdAdjustmentData() {
+    protected void bindMtdAdjustmentService(MtdAdjustmentService service) {
+        System.out.println("MTD Application: MTD调整服务已绑定");
+        this.mtdAdjustmentService = service;
+        
+        // 如果当前正在使用DHR_AGENT模式，重新初始化处理程序
+        if (freqAdjustMethod == FrequencyAdjustmentMethod.DHR_AGENT) {
+            cleanupFrequencyAdjustmentMethod();
+            initFrequencyAdjustmentMethod();
+        }
+    }
+    
+    /**
+     * 解绑MTD调整服务
+     * @param service MTD调整服务实例
+     */
+    protected void unbindMtdAdjustmentService(MtdAdjustmentService service) {
+        System.out.println("MTD Application: MTD调整服务已解绑");
+        this.mtdAdjustmentService = null;
+    }
+    
+    /**
+     * Clean up any frequency adjustment method resources
+     */
+    private void cleanupFrequencyAdjustmentMethod() {
+        // Clean up DHR agent handler
+        if (dhrAgentHandler != null) {
+            dhrAgentHandler.close();
+            dhrAgentHandler = null;
+        }
+        
+        // Clean up Two-Schema processor
+        if (twoScemaProcessor != null) {
+            twoScemaProcessor.stop();
+            twoScemaProcessor = null;
+        }
+        
+        // Clean up WoLF-MTD scheduler
+        if (freqAdjustScheduler != null) {
+            freqAdjustScheduler.shutdown();
+            try {
+                if (!freqAdjustScheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                    freqAdjustScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                freqAdjustScheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            freqAdjustScheduler = null;
+        }
+        
+        // Reset WoLF-MTD instance
+        wolfMTD = null;
+    }
+    
+    /**
+     * Update frequency using WoLF-MTD
+     */
+    private void updateWolfMtdFrequency() {
+        if (wolfMTD == null) {
+            return;
+        }
+        
         try {
-            System.out.println("MTD Application: 开始定期获取MTD调整数据");
-            
-            // 检查mtdAdjustmentService是否为null，这是导致空指针异常的主要原因
-            if (mtdAdjustmentService == null) {
-                System.out.println("MTD Application: MTD调整服务未就绪，跳过定期获取数据");
-                return;
-            }
-            
-            // 调用getAdjustmentData()方法，获取调整数据
-            MtdAdjustmentData data = mtdAdjustmentService.getAdjustmentData();
-            
-            if (data != null) {
-                System.out.println("MTD Application: 获取到MTD调整数据 - " + data);
-                handleMtdAdjustmentData(data);
-            } else {
-                System.out.println("MTD Application: 获取数据失败，未获取到数据");
-            }
+            // Mock metrics: [attack frequency, load, exposure time]
+            double[] metrics = {0.2, 0.3, 0.4};
+            wolfMTD.applyToMtdSystem(metrics);
         } catch (Exception e) {
-            System.err.println("MTD Application: 获取MTD调整数据时发生错误: " + e.getMessage());
-            System.err.println("详细错误信息: " + e.toString());
+            log.error("MTD Application: 更新WoLF-MTD频率时出错: {}", e.getMessage(), e);
             e.printStackTrace();
         }
     }
-
+    
     @Deactivate
     public void deactivate() {
         mtdHostsManage.sign=false;
         mtdHostsManage.rollbackAttackList();
         
-        // 关闭调度线程
-        if (scheduler != null) {
-            scheduler.shutdown();
-            try {
-                if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
-                    scheduler.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                scheduler.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
+        // Clean up frequency adjustment method resources
+        cleanupFrequencyAdjustmentMethod();
+        
         System.out.println("MTD Application: 已停用");
         
         cfgService.unregisterProperties(getClass(), false);

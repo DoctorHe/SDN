@@ -146,7 +146,7 @@
             <configuration>
                 <instructions>
                     <Export-Package>org.onosproject.mtd.event;version="1.0.0.SNAPSHOT"</Export-Package>
-                    <Import-Package>dhr.agent.*;version="[1.0.0.SNAPSHOT,2.0.0.SNAPSHOT)",*</Import-Package>
+                    <Import-Package>dhr.agent.*;version="[1.0.0.SNAPSHOT,2.0.0.SNAPSHOT)";resolution:=optional,*</Import-Package>
                 </instructions>
             </configuration>
         </plugin>

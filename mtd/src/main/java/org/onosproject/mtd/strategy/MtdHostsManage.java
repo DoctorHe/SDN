@@ -10,7 +10,9 @@ import org.slf4j.Logger;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
 
+import static org.onlab.util.Tools.delay;
 import static org.slf4j.LoggerFactory.getLogger;
 
 
@@ -42,21 +44,22 @@ public class MtdHostsManage implements Runnable{
     /**
      * 课题四
      * 定义目标主机的用户名、IP地址、路径和密码
-     */
+     
      private static String destinationUser =  "hello";
      private static String destinationHost = "192.168.10.110";
      private static String destinationPath = "/home/hello/hdu_home/mtd_log/";
      private static String password = "Qwe123!!";
+    */
 
-     // save hosts in map
+    // Save hosts in map
     public Map<Host,IpAddress> hostIpAddressMap = new HashMap<Host, IpAddress>() ;
     public Map<IpAddress,Host> IpAddressHostMap = new HashMap<IpAddress,Host>() ;
 
-    //Save the mapping between the real and virtual addresses of the host
+    // Save the mapping between the real and virtual addresses of the host
     public Map<IpAddress,IpAddress> realVirtualIpMap = new HashMap<IpAddress, IpAddress>();
 
     private ArrayList<PolymorphicHost> polymorphicHosts = new ArrayList<>();
-    //Store polymorphic identification information before and after the change
+    // Store polymorphic identification information before and after the change
     private Map<PolymorphicHost, PolymorphicHost> realVirtualMap = new HashMap<>();
 
     //true or false transformation judgment matrix;
@@ -69,9 +72,89 @@ public class MtdHostsManage implements Runnable{
     private List<String> defenseNetwork;
     // 随机数生成器
     private Random random = new Random();
+    
+    // IP变换统计日志文件路径
+    private static String ipTransformationLogPath = logFolderPath + "/ip_transformation_stats.csv";
+    // 定时任务调度器
+    private ScheduledExecutorService statsScheduler;
 
     public MtdHostsManage() {
         writeLog("Launch mtd management", "");
+    }
+    
+    /**
+     * 初始化IP变换统计CSV文件，写入表头
+     */
+    private void initIpTransformationStatsFile() {
+        PrintWriter writer = null;
+        
+        try {
+            // 确保日志目录存在
+            File folder = new File(logFolderPath);
+            if (!folder.exists()) {
+                folder.mkdirs();
+            }
+            
+            // 创建文件（如果不存在）
+            File file = new File(ipTransformationLogPath);
+            if (!file.exists()) {
+                file.createNewFile();
+            }
+            
+            // 写入CSV表头
+            writer = new PrintWriter(new FileWriter(ipTransformationLogPath, false)); // false表示覆盖
+            writer.println("时间,IP变换数量");
+            
+            log.info("IP变换统计文件已初始化: {}", ipTransformationLogPath);
+        } catch (IOException e) {
+            log.error("初始化IP变换统计文件时出错: {}", e.getMessage(), e);
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                writer.close();
+            }
+        }
+    }
+    
+    /**
+     * 记录当前IP变换统计数据到CSV文件
+     */
+    private void recordIpTransformationStats() {
+        PrintWriter writer = null;
+        
+        try {
+            // 获取当前时间
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String currentTime = sdf.format(new Date());
+            
+            // 确保日志目录存在
+            File folder = new File(logFolderPath);
+            if (!folder.exists()) {
+                folder.mkdirs();
+            }
+            
+            // 创建文件（如果不存在）
+            File file = new File(ipTransformationLogPath);
+            if (!file.exists()) {
+                file.createNewFile();
+            }
+
+            // 写入统计数据
+            int ipTransformationCount = Math.min(500 - defenseNetwork.size(), 500);
+            writer = new PrintWriter(new FileWriter(ipTransformationLogPath, true)); // true表示追加
+            writer.println(currentTime + "," + ipTransformationCount);
+            
+            // 输出日志
+            log.info("IP变换统计已记录: 时间={}, 变换数量={}", currentTime, ipTransformationCount);
+            System.out.println("IP变换统计: 时间=" + currentTime + ", 变换数量=" + ipTransformationCount);
+        } catch (IOException e) {
+            log.error("记录IP变换统计时出错: {}", e.getMessage(), e);
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                writer.close();
+            }
+        }
     }
 
     public MtdHostsManage(Iterable<Host> hosts) {
@@ -134,13 +217,13 @@ public class MtdHostsManage implements Runnable{
 
     //add a host
     public void addHost(Host host){
-        if (host!=null){
+        if (host != null){
             if(!hostIpAddressMap.containsKey(host)){
                 for(IpAddress ipAddress:host.ipAddresses()){
                     hostIpAddressMap.put(host, ipAddress);
                     writeLog(ipAddress, "add success hostIpAddressMap");
                     writeHostIpAddressMap(hostIpAddressMap);
-                    log.info("add a host,the net has hosts:"+(++count));
+                    log.info("add a host,the net has hosts: " + (++count));
                 }
             }
             else {
@@ -149,7 +232,7 @@ public class MtdHostsManage implements Runnable{
             for(IpAddress ipAddress:host.ipAddresses()){
                 if (!realVirtualIpMap.containsKey(ipAddress)){
                     realVirtualIpMap.put(ipAddress, ipAddress);
-                    writeLog(host,"add host success realVirtualIpMap");
+                    writeLog(host, "add host success realVirtualIpMap.");
                     writeRealVirtualIpMap(realVirtualIpMap);
                 }
             }
@@ -582,6 +665,24 @@ public class MtdHostsManage implements Runnable{
         mtdMechanism.export();
         MtdMechanism.initSHH();
         hostToServer(MtdMechanism.serverHasHosts1,MtdMechanism.serverHasHosts2,MtdMechanism.serverHasHosts3);
+        
+        // 初始化CSV文件，写入表头
+        initIpTransformationStatsFile();
+        
+        // 创建定时任务，每分钟统计并记录IP变换数量
+        this.statsScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(
+            java.util.concurrent.Executors.defaultThreadFactory());
+        
+        // 每分钟执行一次统计
+        this.statsScheduler.scheduleAtFixedRate(() -> {
+            try {
+                // 记录当前时间和IP变换数量
+                recordIpTransformationStats();
+            } catch (Exception e) {
+                log.error("记录IP变换统计时出错: {}", e.getMessage(), e);
+                e.printStackTrace();
+            }
+        }, 60, 60, java.util.concurrent.TimeUnit.SECONDS);
         while(sign){
             int[] host = chances(mtdMechanism.hfrMatrix,0);
             System.out.println("chance host:"+ (host[0]+1) +",    mtd mechanism:" + (host[1]+1));
@@ -707,12 +808,29 @@ public class MtdHostsManage implements Runnable{
                 float factor = Math.max(MtdMechanism.adjustmentFactor, 0.1f);
                 long sleepTime = Math.round(baseSleepTime / factor);
                 // 设置sleep时间的上下限，确保执行频率在合理范围内
-                sleepTime = Math.max(sleepTime, 1000); // 最短1秒
-                sleepTime = Math.min(sleepTime, 5000); // 最长5秒
+                sleepTime = Math.max(sleepTime, 500);
+                sleepTime = Math.min(sleepTime, 15000);
                 Thread.sleep(sleepTime);
                 System.out.println("MTD Hosts Manage: 执行频率调整完成，当前调整系数: " + factor + ", 睡眠时间: " + sleepTime + "ms");
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
+            }
+        }
+        
+        // 线程退出时，关闭定时任务调度器
+        if (statsScheduler != null) {
+            try {
+                log.info("正在关闭IP变换统计定时任务...");
+                statsScheduler.shutdown();
+                if (!statsScheduler.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    log.warn("IP变换统计定时任务无法正常关闭，强制关闭...");
+                    statsScheduler.shutdownNow();
+                }
+                log.info("IP变换统计定时任务已关闭");
+            } catch (InterruptedException e) {
+                log.error("关闭IP变换统计定时任务时出错: {}", e.getMessage(), e);
+                statsScheduler.shutdownNow();
+                Thread.currentThread().interrupt();
             }
         }
     }
@@ -725,6 +843,8 @@ public class MtdHostsManage implements Runnable{
         try {
             Thread.sleep(10000);
         } catch (InterruptedException e) {
+
+
             e.printStackTrace();
         }
         while(sign==true){

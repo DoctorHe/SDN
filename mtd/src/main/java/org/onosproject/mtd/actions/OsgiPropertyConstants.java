@@ -64,4 +64,8 @@ public final class OsgiPropertyConstants {
 
     static final String RECORD_METRICS = "recordMetrics";
     static final boolean RECORD_METRICS_DEFAULT = false;
+    
+    // Frequency adjustment method configuration
+    static final String FREQ_ADJUST_METHOD = "freqAdjustMethod";
+    static final String FREQ_ADJUST_METHOD_DEFAULT = "dhr-agent";
 }
